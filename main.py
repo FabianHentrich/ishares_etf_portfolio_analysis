@@ -116,7 +116,7 @@ except Exception as e:
 assets = depot[depot["Art"].isin(["Aktie", "Cash", "Krypto"])]
 assets = assets.loc[:, ["Ticker", "Art", "Position", "Sektor", "Standort", "Marktwert (%)"]]
 assets = assets.rename(columns={"Ticker": "Emittententicker", "Position": "Name", "Art": "ETF",
-                                 "Marktwert (%)": "relative Gewichtung (%)"})
+                                "Marktwert (%)": "relative Gewichtung (%)"})
 depot_data = pd.concat([etf_data, assets], ignore_index=True, sort=False)
 
 # 8. Generate summaries
@@ -143,6 +143,7 @@ depot_data_stocks.sort_values(by='Gesamtgewichtung (%)', ascending=False, inplac
 
 # 9. Export results to Excel
 from scripts.file_handling import export_to_excel
+
 export_to_excel(
     OUTPUT_FILE,
     depot,
@@ -172,4 +173,3 @@ plot_pie_chart(depot_data_locations, 'Ländergewichtung (%)', 'Standort', 'Über
 
 stop = timeit.default_timer()
 print("Laufzeit:", stop - start, "Sekunden")
-
