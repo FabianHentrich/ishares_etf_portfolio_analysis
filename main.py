@@ -1,10 +1,10 @@
 import os
+import timeit
 import pandas as pd
 from scripts.data_download import download_csv_if_old, download_stock_price
 from scripts.data_processing import clean_etf_data, calculate_relative_weighting
 from scripts.file_handling import read_etf_data, export_to_excel
 from scripts.plotting import plot_pie_chart
-import timeit
 
 start = timeit.default_timer()
 
@@ -142,8 +142,6 @@ depot_data_stocks.rename(columns={'relative Gewichtung (%)': 'Gesamtgewichtung (
 depot_data_stocks.sort_values(by='Gesamtgewichtung (%)', ascending=False, inplace=True)
 
 # 9. Export results to Excel
-from scripts.file_handling import export_to_excel
-
 export_to_excel(
     OUTPUT_FILE,
     depot,
