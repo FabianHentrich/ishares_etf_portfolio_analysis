@@ -1,6 +1,3 @@
-
-# main.py
-
 import os
 import pandas as pd
 from scripts.data_download import download_csv_if_old, download_stock_price
@@ -9,170 +6,170 @@ from scripts.file_handling import read_etf_data, export_to_excel
 from scripts.plotting import plot_pie_chart
 import timeit
 
+start = timeit.default_timer()
 
-def main():
-    start = timeit.default_timer()
+# Define constants
+DOWNLOAD_PATH = "C:\\Users\\iQ_3_\\Documents\\GitHub\\ishares_etf_portfolio_analysis\\downloadfiles"
+SAVE_PATH = "C:\\Users\\iQ_3_\\Documents\\GitHub\\ishares_etf_portfolio_analysis\\outputfiles"
 
-    # Define constants
-    DOWNLOAD_PATH = "C:\\Users\\iQ_3_\\Documents\GitHub\\ishares_etf_portfolio_analysis\\downloadfiles"
-    SAVE_PATH = "C:\\Users\\iQ_3_\\Documents\GitHub\\ishares_etf_portfolio_analysis\\outputfiles"
+CSV_URL = [
+    'https://www.ishares.com/de/privatanleger/de/produkte/290846/ishares-msci-world-sri-ucits-etf-fund/1478358465952.ajax?fileType=csv&fileName=2B7K_holdings&dataType=fund',
+    'https://www.ishares.com/de/privatanleger/de/produkte/288147/ishares-msci-world-quality-dividend-esg-ucits-etf-fund/1478358465952.ajax?fileType=csv&fileName=2B7J_holdings&dataType=fund',
+    'https://www.ishares.com/de/privatanleger/de/produkte/288021/ishares-msci-europe-quality-dividend-esg-ucits-etf-eur/1478358465952.ajax?fileType=csv&fileName=QDVX_holdings&dataType=fund',
+    'https://www.ishares.com/de/privatanleger/de/produkte/295689/ishares-core-msci-em-imi-ucits-etf-fund/1478358465952.ajax?fileType=csv&fileName=EIMU_holdings&dataType=fund'
+]
+ETF_CSV_FILE = [
+    'iShares MSCI World SRI ETF.csv',
+    'iShares MSCI World Quality Dividend ESG ETF.csv',
+    'iShares MSCI Europe Quality Dividend ESG ETF.csv',
+    'iShares Core MSCI Emerging Markets IMI ETF.csv'
+]
+INPUT_FILE = "portfolio.xlsx"
+OUTPUT_FILE = os.path.join(SAVE_PATH, "stockoverview.xlsx")
 
-    CSV_URL = [
-        'https://www.ishares.com/de/privatanleger/de/produkte/290846/ishares-msci-world-sri-ucits-etf-fund/1478358465952.ajax?fileType=csv&fileName=2B7K_holdings&dataType=fund',
-        'https://www.ishares.com/de/privatanleger/de/produkte/288147/ishares-msci-world-quality-dividend-esg-ucits-etf-fund/1478358465952.ajax?fileType=csv&fileName=2B7J_holdings&dataType=fund',
-        'https://www.ishares.com/de/privatanleger/de/produkte/288021/ishares-msci-europe-quality-dividend-esg-ucits-etf-eur/1478358465952.ajax?fileType=csv&fileName=QDVX_holdings&dataType=fund',
-        'https://www.ishares.com/de/privatanleger/de/produkte/295689/ishares-core-msci-em-imi-ucits-etf-fund/1478358465952.ajax?fileType=csv&fileName=EIMU_holdings&dataType=fund'
-    ]
-    ETF_CSV_FILE = [
-        'iShares MSCI World SRI ETF.csv',
-        'iShares MSCI World Quality Dividend ESG ETF.csv',
-        'iShares MSCI Europe Quality Dividend ESG ETF.csv',
-        'iShares Core MSCI Emerging Markets IMI ETF.csv'
-    ]
-    INPUT_FILE = "portfolio.xlsx"
-    OUTPUT_FILE = os.path.join(SAVE_PATH, "stockoverview.xlsx")
+STOCK_TICKER_SUFFIXES = ['.DE', '.F']
+CRYPTO_TICKER_SUFFIXES = ['-EUR']
 
-    STOCK_TICKER_SUFFIXES = ['.DE', '.F']
-    CRYPTO_TICKER_SUFFIXES = ['-EUR']
+# 1. Download CSV data
+download_csv_if_old(CSV_URL, DOWNLOAD_PATH, ETF_CSV_FILE)
 
-    # 1. Download CSV data
-    download_csv_if_old(CSV_URL, DOWNLOAD_PATH, ETF_CSV_FILE)
+# 2. Read ETF data
+etf_data_files = [os.path.join(DOWNLOAD_PATH, file) for file in ETF_CSV_FILE]
+etf_data_list = []
 
-    # 2. Read ETF data
-    etf_data_files = [os.path.join(DOWNLOAD_PATH, file) for file in ETF_CSV_FILE]
-    etf_data_list = []
-    for file in etf_data_files:
-        df = read_etf_data(file)
-        if df is not None:
-            etf_data_list.append(df)
-    if etf_data_list:
-        etf_data = pd.concat(etf_data_list, ignore_index=True)
-    else:
-        print("No ETF data available. Exiting.")
-        return
+for file in etf_data_files:
+    df = read_etf_data(file)
+    if df is not None:
+        etf_data_list.append(df)
 
-    # Debugging: Check ETF Data
-    print("ETF Data Columns:", etf_data.columns.tolist())
-    print(etf_data.head())
+if etf_data_list:
+    etf_data = pd.concat(etf_data_list, ignore_index=True)
+else:
+    print("No ETF data available. Exiting.")
+    exit()  # Use exit() instead of return
 
-    # 3. Read depot data
-    if not os.path.exists(INPUT_FILE):
-        print(f"Input file '{INPUT_FILE}' does not exist. Exiting.")
-        return
-    depot = pd.read_excel(INPUT_FILE)
+# Debugging: Check ETF Data
+print("ETF Data Columns:", etf_data.columns.tolist())
+print(etf_data.head())
 
-    # Remove suffix from 'Ticker' column for stocks and ETFs
-    depot.loc[depot['Art'].isin(['Aktie', 'ETF']), 'Ticker'] = depot['Ticker'].str.replace(r'\..*$', '', regex=True)
+# 3. Read depot data
+if not os.path.exists(INPUT_FILE):
+    print(f"Input file '{INPUT_FILE}' does not exist. Exiting.")
+    exit()  # Use exit() instead of return
 
-    # Remove suffix from 'Ticker' column for cryptos
-    depot.loc[depot['Art'] == 'Krypto', 'Ticker'] = depot['Ticker'].str.replace(r'\-.*$', '', regex=True)
+depot = pd.read_excel(INPUT_FILE)
 
-    print("Depot DataFrame Columns After Processing:", depot.columns.tolist())
+# Remove suffix from 'Ticker' column for stocks and ETFs
+depot.loc[depot['Art'].isin(['Aktie', 'ETF']), 'Ticker'] = depot['Ticker'].str.replace(r'\..*$', '', regex=True)
+
+# Remove suffix from 'Ticker' column for cryptos
+depot.loc[depot['Art'] == 'Krypto', 'Ticker'] = depot['Ticker'].str.replace(r'\-.*$', '', regex=True)
+
+print("Depot DataFrame Columns After Processing:", depot.columns.tolist())
+print(depot.head())
+
+# 4. Download stock prices
+stock_prices = download_stock_price(depot, STOCK_TICKER_SUFFIXES, CRYPTO_TICKER_SUFFIXES)
+
+if stock_prices is not None:
+    # Merge stock prices with depot
+    depot = depot.merge(stock_prices[['Ticker', 'Kurs']], on='Ticker', how='left')
+    print("Depot DataFrame Columns After Joining:", depot.columns.tolist())
+
+    # Rename columns to match your requirements
+    depot.columns = ["Ticker", "Art", "Position", "Sektor", "Standort", "Anteile", "Kurs"]
     print(depot.head())
 
-    # 4. Download stock prices
-    stock_prices = download_stock_price(depot, STOCK_TICKER_SUFFIXES, CRYPTO_TICKER_SUFFIXES)
+    # Convert columns to numeric, forcing non-numeric to NaN
+    depot["Kurs"] = pd.to_numeric(depot["Kurs"], errors='coerce')
+    depot["Anteile"] = pd.to_numeric(depot["Anteile"], errors='coerce')
 
-    if stock_prices is not None:
-        # Join stock prices with suffixes to avoid conflicts in case of column name overlap
-        depot = depot.merge(stock_prices[['Ticker', 'Kurs']], on='Ticker', how='left')
-        print("Depot DataFrame Columns After Joining:", depot.columns.tolist())
+    # Calculate 'Marktwert' and 'Marktwert (%)'
+    depot["Marktwert"] = depot["Anteile"] * depot["Kurs"]
+    depot["Marktwert (%)"] = depot["Marktwert"] / depot["Marktwert"].sum() * 100
 
-        # Rename columns to match your requirements, removing the suffix from 'Kurs'
-        depot.columns = ["Ticker", "Art", "Position", "Sektor", "Standort", "Anteile", "Kurs"]
-        print(depot.head())
+    # Debugging: Check depot after calculations
+    print("Depot DataFrame Columns After Calculations:", depot.columns.tolist())
+    print(depot.head())
 
-        # Calculate 'Marktwert' and 'Marktwert (%)'
-        depot["Kurs"] = pd.to_numeric(depot["Kurs"], errors='coerce')  # Convert to numeric, forcing non-numeric to NaN
-        depot["Anteile"] = pd.to_numeric(depot["Anteile"], errors='coerce')
+else:
+    print("Stock prices download failed. Exiting.")
+    exit()  # Use exit() instead of return
 
-        depot["Marktwert"] = depot["Anteile"] * depot["Kurs"]
-        depot["Marktwert (%)"] = depot["Marktwert"] / depot["Marktwert"].sum() * 100
+# 5. Clean ETF data
+etf_data = clean_etf_data(etf_data)
+print("Cleaned ETF Data:")
+print(etf_data.head())
 
-        # Debugging: Check depot after calculations
-        print("Depot DataFrame Columns After Calculations:", depot.columns.tolist())
-        print(depot.head())
+# 6. Calculate relative weighting
+try:
+    etf_data, message = calculate_relative_weighting(etf_data, depot)
+    print(message)
+except KeyError as e:
+    print(f"Error in calculating relative weighting: {e}")
+    exit()  # Use exit() instead of return
+except Exception as e:
+    print(f"Unexpected error: {e}")
+    exit()  # Use exit() instead of return
 
-    else:
-        print("Stock prices download failed. Exiting.")
-        return
+# 7. Prepare assets and concatenate with ETF data
+assets = depot[depot["Art"].isin(["Aktie", "Cash", "Krypto"])]
+assets = assets.loc[:, ["Ticker", "Art", "Position", "Sektor", "Standort", "Marktwert (%)"]]
+assets = assets.rename(columns={"Ticker": "Emittententicker", "Position": "Name", "Art": "ETF",
+                                 "Marktwert (%)": "relative Gewichtung (%)"})
+depot_data = pd.concat([etf_data, assets], ignore_index=True, sort=False)
 
-    # 5. Clean ETF data
-    etf_data = clean_etf_data(etf_data)
-    print("Cleaned ETF Data:")
-    print(etf_data.head())
+# 8. Generate summaries
+depot_data_sectors = depot_data.groupby(['Sektor'])['relative Gewichtung (%)'].sum().reset_index()
+depot_data_sectors.rename(columns={'relative Gewichtung (%)': 'Sektorgewichtung (%)'}, inplace=True)
+depot_data_sectors.sort_values(by='Sektorgewichtung (%)', ascending=False, inplace=True)
 
-    # 6. Calculate relative weighting
-    try:
-        etf_data, message = calculate_relative_weighting(etf_data, depot)
-        print(message)
-    except KeyError as e:
-        print(f"Error in calculating relative weighting: {e}")
-        return
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        return
+depot_data_locations = depot_data.groupby(['Standort'])['relative Gewichtung (%)'].sum().reset_index()
+depot_data_locations.rename(columns={'relative Gewichtung (%)': 'Ländergewichtung (%)'}, inplace=True)
+depot_data_locations.sort_values(by='Ländergewichtung (%)', ascending=False, inplace=True)
 
-    # 7. Prepare assets and concatenate with ETF data
-    assets = depot[depot["Art"].isin(["Aktie", "Cash", "Krypto"])]
-    assets = assets.loc[:, ["Ticker", "Art", "Position", "Sektor", "Standort", "Marktwert (%)"]]
-    assets = assets.rename(columns={"Ticker": "Emittententicker", "Position": "Name", "Art": "ETF",
-                                    "Marktwert (%)": "relative Gewichtung (%)"})
-    depot_data = pd.concat([etf_data, assets], ignore_index=True, sort=False)
+depot_data_etfs = depot_data.groupby(['ETF'])['relative Gewichtung (%)'].sum().reset_index()
+depot_data_etfs.rename(columns={'relative Gewichtung (%)': 'ETF-Gewichtung (%)'}, inplace=True)
+depot_data_etfs.sort_values(by='ETF-Gewichtung (%)', ascending=False, inplace=True)
 
-    # 8. Generate summaries
-    depot_data_sectors = depot_data.groupby(['Sektor'])['relative Gewichtung (%)'].sum().reset_index()
-    depot_data_sectors.rename(columns={'relative Gewichtung (%)': 'Sektorgewichtung (%)'}, inplace=True)
-    depot_data_sectors.sort_values(by='Sektorgewichtung (%)', ascending=False, inplace=True)
+depot_data_stocks = depot_data.groupby(['Name']).agg({
+    "Emittententicker": 'first',
+    'relative Gewichtung (%)': 'sum',
+    'Sektor': 'first',
+    'Standort': 'first'
+}).reset_index()
+depot_data_stocks.rename(columns={'relative Gewichtung (%)': 'Gesamtgewichtung (%)'}, inplace=True)
+depot_data_stocks.sort_values(by='Gesamtgewichtung (%)', ascending=False, inplace=True)
 
-    depot_data_locations = depot_data.groupby(['Standort'])['relative Gewichtung (%)'].sum().reset_index()
-    depot_data_locations.rename(columns={'relative Gewichtung (%)': 'Ländergewichtung (%)'}, inplace=True)
-    depot_data_locations.sort_values(by='Ländergewichtung (%)', ascending=False, inplace=True)
+# 9. Export results to Excel
+from scripts.file_handling import export_to_excel
+export_to_excel(
+    OUTPUT_FILE,
+    depot,
+    depot_data,
+    depot_data_stocks,
+    depot_data_etfs,
+    depot_data_sectors,
+    depot_data_locations
+)
 
-    depot_data_etfs = depot_data.groupby(['ETF'])['relative Gewichtung (%)'].sum().reset_index()
-    depot_data_etfs.rename(columns={'relative Gewichtung (%)': 'ETF-Gewichtung (%)'}, inplace=True)
-    depot_data_etfs.sort_values(by='ETF-Gewichtung (%)', ascending=False, inplace=True)
+# 10. Generate charts
+stocks_100 = depot_data_stocks.iloc[0:99, :]
+others = 100 - stocks_100["Gesamtgewichtung (%)"].sum()
+others_df = pd.DataFrame({"Name": ["Sonstige"], "Gesamtgewichtung (%)": [others]})
+stocks_100 = pd.concat([stocks_100, others_df])
 
-    depot_data_stocks = depot_data.groupby(['Name']).agg({
-        "Emittententicker": 'first',
-        'relative Gewichtung (%)': 'sum',
-        'Sektor': 'first',
-        'Standort': 'first'
-    }).reset_index()
-    depot_data_stocks.rename(columns={'relative Gewichtung (%)': 'Gesamtgewichtung (%)'}, inplace=True)
-    depot_data_stocks.sort_values(by='Gesamtgewichtung (%)', ascending=False, inplace=True)
+plot_pie_chart(stocks_100, 'Gesamtgewichtung (%)', 'Name', 'Top 100 Aktien',
+               f"{SAVE_PATH}/1. Übersicht nach Positionen.pdf")
+plot_pie_chart(depot, 'Marktwert (%)', 'Position', 'Übersicht nach Depot',
+               f"{SAVE_PATH}/2. Übersicht nach Depot.pdf")
+plot_pie_chart(depot, 'Marktwert (%)', 'Art', 'Übersicht nach Anlageart',
+               f"{SAVE_PATH}/3. Übersicht nach Anlageart.pdf")
+plot_pie_chart(depot_data_sectors, 'Sektorgewichtung (%)', 'Sektor', 'Übersicht nach Sektoren',
+               f"{SAVE_PATH}/4. Übersicht nach Sektoren.pdf")
+plot_pie_chart(depot_data_locations, 'Ländergewichtung (%)', 'Standort', 'Übersicht nach Standorten',
+               f"{SAVE_PATH}/5. Übersicht nach Ländern.pdf")
 
-    # 9. Export results to Excel
-    from scripts.file_handling import export_to_excel
-    export_to_excel(
-        OUTPUT_FILE,
-        depot,
-        depot_data,
-        depot_data_stocks,
-        depot_data_etfs,
-        depot_data_sectors,
-        depot_data_locations
-    )
+stop = timeit.default_timer()
+print("Laufzeit:", stop - start, "Sekunden")
 
-    # 10. Generate charts
-    stocks_100 = depot_data_stocks.iloc[0:99, :]
-    others = 100 - stocks_100["Gesamtgewichtung (%)"].sum()
-    others_df = pd.DataFrame({"Name": ["Sonstige"], "Gesamtgewichtung (%)": [others]})
-    stocks_100 = pd.concat([stocks_100, others_df])
-
-    plot_pie_chart(stocks_100, 'Gesamtgewichtung (%)', 'Name', 'Top 100 Aktien',
-                   f"{SAVE_PATH}/1. Übersicht nach Positionen.pdf")
-    plot_pie_chart(depot, 'Marktwert (%)', 'Position', 'Übersicht nach Depot',
-                   f"{SAVE_PATH}/2. Übersicht nach Depot.pdf")
-    plot_pie_chart(depot, 'Marktwert (%)', 'Art', 'Übersicht nach Anlageart',
-                   f"{SAVE_PATH}/3. Übersicht nach Anlageart.pdf")
-    plot_pie_chart(depot_data_sectors, 'Sektorgewichtung (%)', 'Sektor', 'Übersicht nach Sektoren',
-                   f"{SAVE_PATH}/4. Übersicht nach Sektoren.pdf")
-    plot_pie_chart(depot_data_locations, 'Ländergewichtung (%)', 'Standort', 'Übersicht nach Standorten',
-                   f"{SAVE_PATH}/5. Übersicht nach Ländern.pdf")
-
-    stop = timeit.default_timer()
-    print("Laufzeit:", stop - start, "Sekunden")
-
-if __name__ == "__main__":
-    main()
