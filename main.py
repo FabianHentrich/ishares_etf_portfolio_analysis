@@ -9,8 +9,9 @@ from scripts.plotting import plot_pie_chart
 start = timeit.default_timer()
 
 # Define constants
-DOWNLOAD_PATH = "C:\\Users\\iQ_3_\\Documents\\GitHub\\ishares_etf_portfolio_analysis\\downloadfiles"
-SAVE_PATH = "C:\\Users\\iQ_3_\\Documents\\GitHub\\ishares_etf_portfolio_analysis\\outputfiles"
+FOLDER_PATH = "C:\\Users\\iQ_3_\\Desktop\\iCloudDrive\\Geld\\Depotaufteilung"
+DOWNLOAD_PATH = os.path.join(FOLDER_PATH, "downloadfiles")
+SAVE_PATH = os.path.join(FOLDER_PATH, "outputfiles")
 
 CSV_URL = [
     'https://www.ishares.com/de/privatanleger/de/produkte/290846/ishares-msci-world-sri-ucits-etf-fund/1478358465952.ajax?fileType=csv&fileName=2B7K_holdings&dataType=fund',
@@ -24,7 +25,7 @@ ETF_CSV_FILE = [
     'iShares MSCI Europe Quality Dividend ESG ETF.csv',
     'iShares Core MSCI Emerging Markets IMI ETF.csv'
 ]
-INPUT_FILE = "portfolio.xlsx"
+INPUT_FILE = os.path.join(FOLDER_PATH,"portfolio.xlsx")
 OUTPUT_FILE = os.path.join(SAVE_PATH, "stockoverview.xlsx")
 
 STOCK_TICKER_SUFFIXES = ['.DE', '.F']
