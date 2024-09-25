@@ -25,7 +25,7 @@ ETF_CSV_FILE = [
     'iShares MSCI Europe Quality Dividend ESG ETF.csv',
     'iShares Core MSCI Emerging Markets IMI ETF.csv'
 ]
-INPUT_FILE = os.path.join(FOLDER_PATH,"portfolio.xlsx")
+INPUT_FILE = os.path.join(FOLDER_PATH, "portfolio.xlsx")
 OUTPUT_FILE = os.path.join(SAVE_PATH, "stockoverview.xlsx")
 
 STOCK_TICKER_SUFFIXES = ['.DE', '.F']

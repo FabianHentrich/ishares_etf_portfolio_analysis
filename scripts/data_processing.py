@@ -3,21 +3,20 @@
 import pandas as pd
 import os
 
-SECTOR_MAPPING = [
-    ['Financials', 'unknown', 'IT', 'Zyklische Konsumgüter\xa0', 'Nichtzyklische Konsumgüter', "Kommunikation"],
-    ['Finanzdienstleister', 'Cash und/oder Derivate', 'Technologie', 'Konsumgüter (zyklisch)',
-     'Konsumgüter (nichtzyklisch)', "Telekommunikation"]
-]
+#SECTOR_MAPPING = [
+#    ['IT'],
+#    ['Technologie']
+#]
 
-LOCATION_MAPPING = [
-    ["Vereinigte Staaten", 'Großbritannien (UK)', 'Hongkong'],
-    ["USA", 'Vereinigtes Königreich', 'Hong Kong']
-]
+#LOCATION_MAPPING = [
+#    ["Vereinigte Staaten"],
+#    ["USA"]
+#]
 
 
 def clean_etf_data(df):
-    df['Sektor'].replace(SECTOR_MAPPING[0], SECTOR_MAPPING[1], inplace=True)
-    df["Standort"].replace(LOCATION_MAPPING[0], LOCATION_MAPPING[1], inplace=True)
+    #df['Sektor'].replace(SECTOR_MAPPING[0], SECTOR_MAPPING[1], inplace=True)
+    #df["Standort"].replace(LOCATION_MAPPING[0], LOCATION_MAPPING[1], inplace=True)
     df['ETF'] = df['ETF'].apply(lambda x: os.path.splitext(os.path.basename(x))[0])
     df['Gewichtung (%)'] = df['Gewichtung (%)'].str.replace(',', '.')
     df['Gewichtung (%)'] = pd.to_numeric(df['Gewichtung (%)'])
