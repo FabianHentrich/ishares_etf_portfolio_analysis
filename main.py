@@ -1,6 +1,8 @@
 import os
 import timeit
 import pandas as pd
+import os
+from dotenv import load_dotenv
 from scripts.data_download import download_csv_if_old, download_stock_price
 from scripts.data_processing import clean_etf_data, calculate_relative_weighting
 from scripts.file_handling import read_etf_data, export_to_excel
@@ -8,28 +10,35 @@ from scripts.plotting import plot_pie_chart
 
 start = timeit.default_timer()
 
-# Define constants
-FOLDER_PATH = "C:\\Users\\iQ_3_\\Desktop\\iCloudDrive\\Geld\\Depotaufteilung"
-DOWNLOAD_PATH = os.path.join(FOLDER_PATH, "downloadfiles")
-SAVE_PATH = os.path.join(FOLDER_PATH, "outputfiles")
+# load environment variables
+load_dotenv()
 
-CSV_URL = [
-    'https://www.ishares.com/de/privatanleger/de/produkte/290846/ishares-msci-world-sri-ucits-etf-fund/1478358465952.ajax?fileType=csv&fileName=2B7K_holdings&dataType=fund',
-    'https://www.ishares.com/de/privatanleger/de/produkte/288147/ishares-msci-world-quality-dividend-esg-ucits-etf-fund/1478358465952.ajax?fileType=csv&fileName=2B7J_holdings&dataType=fund',
-    'https://www.ishares.com/de/privatanleger/de/produkte/288021/ishares-msci-europe-quality-dividend-esg-ucits-etf-eur/1478358465952.ajax?fileType=csv&fileName=QDVX_holdings&dataType=fund',
-    'https://www.ishares.com/de/privatanleger/de/produkte/295689/ishares-core-msci-em-imi-ucits-etf-fund/1478358465952.ajax?fileType=csv&fileName=EIMU_holdings&dataType=fund'
-]
-ETF_CSV_FILE = [
-    'iShares MSCI World SRI ETF.csv',
-    'iShares MSCI World Quality Dividend ESG ETF.csv',
-    'iShares MSCI Europe Quality Dividend ESG ETF.csv',
-    'iShares Core MSCI Emerging Markets IMI ETF.csv'
-]
-INPUT_FILE = os.path.join(FOLDER_PATH, "portfolio.xlsx")
-OUTPUT_FILE = os.path.join(SAVE_PATH, "stockoverview.xlsx")
+FOLDER_PATH = os.getenv('FOLDER_PATH')
+DOWNLOAD_PATH = os.getenv('DOWNLOAD_PATH')
+SAVE_PATH = os.getenv('SAVE_PATH')
+INPUT_FILE = os.getenv('INPUT_FILE')
+OUTPUT_FILE = os.getenv('OUTPUT_FILE')
 
-STOCK_TICKER_SUFFIXES = ['.DE', '.F']
-CRYPTO_TICKER_SUFFIXES = ['-EUR']
+# Retrieve and split CSV URLs and ETF CSV files, then strip whitespace
+CSV_URL = [CSV_URL.strip() for CSV_URL in os.getenv('CSV_URL', '').split(',')]
+ETF_CSV_FILE = [ETF_CSV_FILE.strip() for ETF_CSV_FILE in os.getenv('ETF_CSV_FILE', '').split(',')]
+
+# Retrieve and split stock ticker suffixes, then strip whitespace
+STOCK_TICKER_SUFFIXES = [suffix.strip() for suffix in os.getenv('STOCK_TICKER_SUFFIXES', '').split(',')]
+
+# Retrieve and split crypto ticker suffixes, then strip whitespace
+CRYPTO_TICKER_SUFFIXES = [suffix.strip() for suffix in os.getenv('CRYPTO_TICKER_SUFFIXES', '').split(',')]
+
+print(f"load_dotenv() successful.\n"
+      f"FOLDER_PATH: {FOLDER_PATH}, \n"
+      f"DOWNLOAD_PATH: {DOWNLOAD_PATH}, \n"
+      f"SAVE_PATH: {SAVE_PATH}, \n"
+      f"INPUT_FILE: {INPUT_FILE}, \n"
+      f"OUTPUT_FILE: {OUTPUT_FILE}, \n"
+      f"CSV_URL: {CSV_URL}, \n"
+      f"ETF_CSV_FILE: {ETF_CSV_FILE}, \n"
+      f"STOCK_TICKER_SUFFIXES: {STOCK_TICKER_SUFFIXES}, \n"
+      f"CRYPTO_TICKER_SUFFIXES: {CRYPTO_TICKER_SUFFIXES}")
 
 # 1. Download CSV data
 download_csv_if_old(CSV_URL, DOWNLOAD_PATH, ETF_CSV_FILE)

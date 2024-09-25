@@ -9,6 +9,14 @@ from pandas.tseries.offsets import BDay
 
 
 def download_csv_if_old(urls, folder_path, filenames, max_age_days=30):
+    """
+    Download CSV files if they are older than max_age_days
+    :param urls: list of URLs to download CSV files
+    :param folder_path: folder path to save the CSV files
+    :param filenames: list of filenames to save the CSV files. should be same length and order as urls
+    :param max_age_days: maximum age of existent CSV file in days. Default is 30 days
+    :return: saved CSV files in the folder_path
+    """
     for url, filename in zip(urls, filenames):
         csv_file_path = os.path.join(folder_path, filename)
         if os.path.exists(csv_file_path):
@@ -28,8 +36,18 @@ def download_csv_if_old(urls, folder_path, filenames, max_age_days=30):
 
 
 def download_stock_price(df, stock_ticker_suffixes=[".DE"], crypto_ticker_suffixes=["-EUR"]):
+    """
+    Download stock prices from Yahoo Finance API for the last working day and store in a DataFrame
+    :param df: DataFrame with 'Ticker' column containing stock and crypto tickers
+    :param stock_ticker_suffixes: suffixes to add to stock tickers for Yahoo Finance API (e.g., ".DE" for Xetra stocks).
+    Default is [".DE"]. For other exchanges, add the suffixes to the list.
+    :param crypto_ticker_suffixes: suffixes to add to crypto tickers for Yahoo Finance API (e.g., "-EUR" for Euro
+    prices). Default is ["-EUR"]. For other currencies, add the suffixes to the list.
+    :return: Returns a DataFrame with 'Ticker' and 'Kurs' columns containing the stock prices.
+    """
     today = pd.Timestamp.today()
     last_working_day = today - pd.offsets.BDay(1)
+    print(f"Last Working Day: {last_working_day}")
 
     # Process stock and ETF tickers
     stock_tickers = df[df["Art"].isin(['Aktie', 'ETF'])]["Ticker"].str.replace(r'\..*$', '', regex=True).tolist()
@@ -38,6 +56,9 @@ def download_stock_price(df, stock_ticker_suffixes=[".DE"], crypto_ticker_suffix
     # Process crypto tickers
     crypto_tickers = df[df["Art"] == "Krypto"]["Ticker"].str.replace(r'\-.*$', '', regex=True).tolist()
     print(f"Crypto Tickers: {crypto_tickers}")
+
+    print(f"Stock Ticker Suffixes: {stock_ticker_suffixes}")
+    print(f"Crypto Ticker Suffixes: {crypto_ticker_suffixes}")
 
     # DataFrame to store tickers and their prices
     prices = pd.DataFrame(columns=['ticker', 'Kurs'])

@@ -15,6 +15,11 @@ import os
 
 
 def clean_etf_data(df):
+    """
+    Clean the ETF data.
+    :param df: DataFrame containing ETF data.
+    :return: DataFrame with cleaned ETF data.
+    """
     #df['Sektor'].replace(SECTOR_MAPPING[0], SECTOR_MAPPING[1], inplace=True)
     #df["Standort"].replace(LOCATION_MAPPING[0], LOCATION_MAPPING[1], inplace=True)
     df['ETF'] = df['ETF'].apply(lambda x: os.path.splitext(os.path.basename(x))[0])
@@ -24,6 +29,12 @@ def clean_etf_data(df):
 
 
 def calculate_relative_weighting(etf_stocks, depot_components):
+    """
+    Calculate the relative weighting ETF stock components in the depot.
+    :param etf_stocks: ETF stocks DataFrame
+    :param depot_components: depot components from the portfolio
+    :return: DataFrame with relative weighting and a message
+    """
     # Check if 'Marktwert (%)' exists
     if 'Marktwert (%)' not in depot_components.columns:
         raise KeyError("'Marktwert (%)' column is missing from depot_components DataFrame.")
