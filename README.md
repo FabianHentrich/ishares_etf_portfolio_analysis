@@ -47,10 +47,11 @@ CRYPTO_TICKER_SUFFIXES="crypto ticker suffix1, crypto ticker suffix2, crypto tic
 ## **How to run the script?**
 
 1. Set up the `.env` file.
-2. Save the `portfolio.xlsx` file in the folder specified in the `.env` file.
-3. Run the script. 
-4. The charts will be saved in the folder specified in the `.env` file and open automatically in your browser.
-5. Check the `stockoverview.xlsx` file in the folder specified in the `.env` file. 
-6. Done!
-7. If you want to run the script again you are overwriting the `stockoverview.xlsx` file and the charts.
-8. The ETF CSV files will only be downloaded if they are not already in the download folder or are older than 30 day (Interval can be changed via`download_csv_if_old(...,...,max_age_days= ?)` in `main.py`).
+2. Create the folder structure as specified in the `.env` file (especially the folders `outputfiles` and `downloadfiles`).
+3. Save the `portfolio.xlsx` file in the folder specified in the `.env` file.
+4. Run the script. 
+5. The charts will be saved in the folder specified in the `.env` file and open automatically in your browser.
+6. Check the `stockoverview.xlsx` file in the folder specified in the `.env` file. 
+7. Done!
+8. If you want to run the script again you are overwriting the `stockoverview.xlsx` file and the charts.
+9. The ETF CSV files will only be downloaded if they are not already in the download folder or are older than 30 day (Interval can be changed via`download_csv_if_old(...,...,max_age_days= ?)` in `main.py`).
