@@ -1,6 +1,6 @@
 # **iShares ETF Analysis for Stocks, Sectors and Countries**
 
-This code is used to download iShares ETF data from the BlackRock website and analyze the data to provide a summary of the stocks, sectors, and countries that the ETF is invested in.
+This code is used to download iShares ETF data from the BlackRock website and analyze the data to provide a summary of the stocks, sectors, and countries that the ETF is invested in and add that to the other portfolio components.
 
 ## **portfolio.xlsx - how does it look like?**
 
