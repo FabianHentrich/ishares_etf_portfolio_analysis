@@ -4,7 +4,7 @@ This code is used to download iShares ETF data from the BlackRock website and an
 
 ## **portfolio.xlsx - how does it look like?**
 
-Check the example file in the repository. The file should be saved in "INPUTFILE". 
+Check the example file in the repository. The file should be saved in ´"INPUTFILE"´. 
 The file should have the following columns:
 
 - **Ticker**: Check Ticker via Yahoo Finance. You don't need to add the suffix. (e.g., Microsoft's ticker is MSFT, but for Germany Xetra it is MSF)
@@ -14,14 +14,16 @@ The file should have the following columns:
 - **Standort**: Country of the security (e.g., United States, Germany, China). Should match the country in the ETF CSV files (so use the iShares framing).
 - **Anteile**: Number of shares of the security
 
-Cash should be added as a security with the following information:
-
-- **Ticker**: -
-- **Art**: Cash
-- **Position**: Cash
-- **Sektor**: Cash und/oder Derivate
-- **Standort**: Cash (Euro)
-- **Anteile**: Amount of cash in the portfolio
+```markdown
+| Ticker | Art   | Position                                    | Sektor                  | Standort     | Anteile |
+|--------|-------|---------------------------------------------|-------------------------|--------------|---------|
+| -      | Cash  | Cash                                        | Cash und/oder Derivate  | Cash (Euro)  | 1000    |
+| 2B7K   | ETF   | iShares MSCI World SRI ETF                  | -                       | -            | 1000    |
+| QDVW   | ETF   | iShares MSCI World Quality Dividend ESG ETF | -                       | -            | 500     |
+| BTC    | Krypto| Bitcoin                                     | Krypto                  | Krypto       | 1       |
+| AAPL   | Aktie | Appel Inc.                                  | Technologie             | USA          | 100     |
+```
+Cash should be added as a security with the ticker "-". `Anteile` should be the amount of cash in the portfolio.
 
 ## **How does the .env file work?**
 
@@ -36,4 +38,5 @@ ETF_CSV_FILE="name of the csv file1, name of the csv file2, name of the csv file
 STOCK_TICKER_SUFFIXES="stock ticker suffix1, stock ticker suffix2, stock ticker suffix3"
 CRYPTO_TICKER_SUFFIXES="crypto ticker suffix1, crypto ticker suffix2, crypto ticker suffix3"
 ```
-ETF_CSV_FILE and CSV_URL have to be in the same order
+- ETF_CSV_FILE and CSV_URL have to be in the same order. Separate the URLs and the file names with a comma. Add as many URLs and file names as you need.
+- STOCK_TICKER_SUFFIXES and CRYPTO_TICKER_SUFFIXES are optional. Default is **´"DE"´** for Xetra and **´"-EUR"´ for crypto in Euro**. If you want to add more suffixes, separate them with a comma.

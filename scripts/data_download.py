@@ -45,6 +45,12 @@ def download_stock_price(df, stock_ticker_suffixes=[".DE"], crypto_ticker_suffix
     prices). Default is ["-EUR"]. For other currencies, add the suffixes to the list.
     :return: Returns a DataFrame with 'Ticker' and 'Kurs' columns containing the stock prices.
     """
+    # Set default values if the lists are empty or None
+    if not stock_ticker_suffixes:
+        stock_ticker_suffixes = [".DE"]
+    if not crypto_ticker_suffixes:
+        crypto_ticker_suffixes = ["-EUR"]
+
     today = pd.Timestamp.today()
     last_working_day = today - pd.offsets.BDay(1)
     print(f"Last Working Day: {last_working_day}")
