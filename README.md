@@ -4,7 +4,7 @@ This code is used to download iShares ETF data from the BlackRock website and an
 
 ## **`portfolio.xlsx` - how does it look like?**
 
-Check the example file in the repository. The file should be saved in ´"INPUTFILE"´. 
+Check the example file in the repository. The file should be saved in ´INPUTFILE´. 
 The file should have the following columns:
 
 - `Ticker`: Check Ticker via Yahoo Finance. You don't need to add the suffix. (e.g., Microsoft's ticker is MSFT, but for Germany Xetra it is MSF)
