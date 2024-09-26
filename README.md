@@ -41,6 +41,8 @@ ETF_CSV_FILE="name of the csv file1, name of the csv file2, name of the csv file
 STOCK_TICKER_SUFFIXES="stock ticker suffix1, stock ticker suffix2, stock ticker suffix3"
 CRYPTO_TICKER_SUFFIXES="crypto ticker suffix1, crypto ticker suffix2, crypto ticker suffix3"
 ```
+- `CSV_URL` should be the URL of the iShares ETF CSV files. You can find the URLs on the BlackRock website.
+![iShares_CSV_download_path.png](iShares_CSV_download_path.png)
 - `ETF_CSV_FILE` and `CSV_URL` have to be in the same order. Separate the URLs and the file names with a comma. Add as many URLs and file names as you need.
 - `STOCK_TICKER_SUFFIXES` and `CRYPTO_TICKER_SUFFIXES` are optional. Default is `.DE` for Xetra and `-EUR` for crypto in Euro**. If you want to add more suffixes, separate them with a comma.
 
