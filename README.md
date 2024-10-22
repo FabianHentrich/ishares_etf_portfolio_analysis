@@ -1,6 +1,6 @@
-# **iShares ETF Analysis for Stocks, Sectors and Countries**
+# **Automated iShares ETF Portfolio Analysis: Stocks, Sectors, and Countries**
 
-This code is used to download iShares ETF data from the BlackRock website and analyze the data to provide a summary of the stocks, sectors, and countries that the ETF is invested in and add that to the other portfolio components.
+This project provides automated analysis of a portfolio of ETFs, stocks and cryptocurrencies. It automates the download of ETF data from the BlackRock website, integrates stock prices via the Yahoo Finance API and creates interactive visualisations for the top 100 stocks, sectors and countries.
 
 ## **`portfolio.xlsx` - how does it look like?**
 
@@ -14,6 +14,7 @@ The file should have the following columns:
 - `Standort`: Country of the security (e.g., United States, Germany, China). Should match the country in the ETF CSV files (so use the iShares framing).
 - `Anteile`: Number of shares of the security
 
+### **Here is an example structure of the `portfolio.xlsx` file:**
 ```markdown
 | Ticker | Art   | Position                                    | Sektor                  | Standort     | Anteile |
 |--------|-------|---------------------------------------------|-------------------------|--------------|---------|
@@ -29,15 +30,17 @@ The file should have the following columns:
 For easier handling, the global variables are stored in a `.env` file. The file should be saved in the same folder as the script.
 
 ### **How to set up the `.env` file?**
+The .env file makes it easy to change configurations such as paths and URLs without having to change the code.
 
+The `.env` file should look like this:
 ```dotenv
 FOLDER_PATH="path to the folder where the files should be stored"
 DOWNLOAD_PATH="${FOLDER_PATH}\\downloadfiles"
 SAVE_PATH="${FOLDER_PATH}\\outputfiles"
 INPUT_FILE="${FOLDER_PATH}\\portfolio.xlsx"
 OUTPUT_FILE="${SAVE_PATH}\\stockoverview.xlsx"
-CSV_URL="download urls 1, download urls 2, download urls 3"
-ETF_CSV_FILE="name of the csv file1, name of the csv file2, name of the csv file3"
+CSV_URL="https://example.com/etf1.csv, https://example.com/etf2.csv"
+ETF_CSV_FILE="ETF_1.csv, ETF_2.csv"
 STOCK_TICKER_SUFFIXES="stock ticker suffix1, stock ticker suffix2, stock ticker suffix3"
 CRYPTO_TICKER_SUFFIXES="crypto ticker suffix1, crypto ticker suffix2, crypto ticker suffix3"
 ```
