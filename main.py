@@ -12,11 +12,22 @@ start = timeit.default_timer()
 # load environment variables
 load_dotenv()
 
+def resolve_env_var(var):
+    """
+    Rekursives auflösen der Dateifpade im .env
+    """
+    previous, resolved = None, os.path.expandvars(var)
+    while previous != resolved:  # Wiederhole, bis keine Änderungen mehr auftreten
+        previous, resolved = resolved, os.path.expandvars(resolved)
+    return resolved
+
+# Resolve environment variables
 FOLDER_PATH = os.getenv('FOLDER_PATH')
-DOWNLOAD_PATH = os.getenv('DOWNLOAD_PATH')
-SAVE_PATH = os.getenv('SAVE_PATH')
-INPUT_FILE = os.getenv('INPUT_FILE')
-OUTPUT_FILE = os.getenv('OUTPUT_FILE')
+DOWNLOAD_PATH = resolve_env_var(os.getenv('DOWNLOAD_PATH'))
+SAVE_PATH = resolve_env_var(os.getenv('SAVE_PATH'))
+INPUT_FILE = resolve_env_var(os.getenv('INPUT_FILE'))
+OUTPUT_FILE = resolve_env_var(os.getenv('OUTPUT_FILE'))
+
 
 # Retrieve and split CSV URLs and ETF CSV files, then strip whitespace
 CSV_URL = [CSV_URL.strip() for CSV_URL in os.getenv('CSV_URL', '').split(',')]
@@ -55,7 +66,7 @@ if etf_data_list:
     etf_data = pd.concat(etf_data_list, ignore_index=True)
 else:
     print("No ETF data available. Exiting.")
-    exit()  # Use exit() instead of return
+    exit()
 
 # Debugging: Check ETF Data
 print("ETF Data Columns:", etf_data.columns.tolist())
@@ -64,7 +75,7 @@ print(etf_data.head())
 # 3. Read depot data
 if not os.path.exists(INPUT_FILE):
     print(f"Input file '{INPUT_FILE}' does not exist. Exiting.")
-    exit()  # Use exit() instead of return
+    exit()
 
 depot = pd.read_excel(INPUT_FILE)
 
