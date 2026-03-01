@@ -145,9 +145,26 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# PyCharm
-#  JetBrains specific template is maintainted in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+# PyCharm / JetBrains
+.idea/
+
+# ---------------------------------------------------------------------------
+# Projektspezifisch
+# ---------------------------------------------------------------------------
+
+# Ausgabedateien (werden bei jedem Run neu generiert)
+*.html
+*.xlsx
+!example_portfolio.xlsx
+
+# Log-Dateien (rotierend, kein Versionierungsbedarf)
+portfolio_analysis.log*
+portfolio_errors.log*
+
+# Fallback-Kurse (werden lokal gepflegt, enthalten ggf. persönliche Daten)
+price_fallback.json
+
+# Temporäre Test-Ausgaben
+test_out.txt
+test_err.txt
+

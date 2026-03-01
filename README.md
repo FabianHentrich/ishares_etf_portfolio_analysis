@@ -1,62 +1,297 @@
-# **Automated iShares ETF Portfolio Analysis: Stocks, Sectors, and Countries**
+# 📊 iShares ETF Portfolio-Analyse
 
-This project provides automated analysis of a portfolio of ETFs, stocks and cryptocurrencies. It automates the download of ETF data from the BlackRock website, integrates stock prices via the Yahoo Finance API and creates interactive visualisations for the top 100 stocks, sectors and countries.
+![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)
+![Plotly](https://img.shields.io/badge/Plotly-6.0%2B-3F4F75?logo=plotly&logoColor=white)
+![pandas](https://img.shields.io/badge/pandas-2.3%2B-150458?logo=pandas&logoColor=white)
+![License](https://img.shields.io/badge/Lizenz-MIT-green)
+![Status](https://img.shields.io/badge/Status-aktiv-brightgreen)
 
-## **`portfolio.xlsx` - how does it look like?**
+Automatisierte Analyse und Visualisierung eines gemischten Depots aus ETFs, Einzelaktien, Kryptowährungen und Cash.
 
-Check the example file in the repository. The file should be saved in ´INPUTFILE´. 
-The file should have the following columns:
+Das Script lädt die aktuellen ETF-Zusammensetzungsdaten direkt von BlackRock/iShares, holt Kurse für alle Positionen über Yahoo Finance und verrechnet beides zu einer vollständigen Portfolioanalyse mit **ETF-Durchblick** – d.h. jede Einzelposition innerhalb eines ETFs wird anteilig auf das Gesamtdepot heruntergebrochen.
 
-- `Ticker`: Check Ticker via Yahoo Finance. You don't need to add the suffix. (e.g., Microsoft's ticker is MSFT, but for Germany Xetra it is MSF)
-- `Art`: Class of security (e.g., Stock aka "Aktie", ETF, Crypto aka "Krypto")
-- `Position`: Name of security (e.g., Microsoft, iShares MSCI World UCITS ETF, Bitcoin). The name should match the names in the ETF CSV files (so use the iShares framing).
-- `Sektor`: Sector of the security (e.g., Technology, Financials, Consumer Discretionary). Should match the sector in the ETF CSV files (so use the iShares framing).
-- `Standort`: Country of the security (e.g., United States, Germany, China). Should match the country in the ETF CSV files (so use the iShares framing).
-- `Anteile`: Number of shares of the security
+Die Ergebnisse werden als **interaktiver HTML-Report** (Pie-Charts, Treemaps, Balkendiagramme, Heatmap, sortierbare Tabellen) sowie als **Excel-Datei** mit 6 Sheets ausgegeben. Der Report öffnet sich nach dem Ausführen automatisch im Browser und ist vollständig offline-fähig – kein Webserver nötig.
 
-### **Here is an example structure of the `portfolio.xlsx` file:**
-```markdown
-| Ticker | Art   | Position                                    | Sektor                  | Standort     | Anteile |
-|--------|-------|---------------------------------------------|-------------------------|--------------|---------|
-| -      | Cash  | Cash                                        | Cash und/oder Derivate  | Cash (Euro)  | 1000    |
-| 2B7K   | ETF   | iShares MSCI World SRI ETF                  | -                       | -            | 1000    |
-| QDVW   | ETF   | iShares MSCI World Quality Dividend ESG ETF | -                       | -            | 500     |
-| BTC    | Krypto| Bitcoin                                     | Krypto                  | Krypto       | 1       |
-| AAPL   | Aktie | Appel Inc.                                  | Technologie             | USA          | 100     |
+**Typische Fragen die das Tool beantwortet:**
+- Wie ist mein Depot nach Assetklasse, Sektor und Land aufgeteilt?
+- Welche Einzelpositionen machen den größten Anteil aus – auch versteckt in ETFs?
+- Wo gibt es Klumpenrisiken durch überlappende ETF-Positionen?
+- Wie diversifiziert ist mein Depot (HHI-Score)?
+
+---
+
+## ✨ Features
+
+| Feature | Beschreibung |
+|---|---|
+| **ETF-Durchblick** | Gewichtung jeder ETF-Einzelposition wird auf das Gesamtdepot heruntergebrochen |
+| **Kurse via yFinance** | Automatischer Download für Aktien, ETFs und Kryptowährungen |
+| **Fallback-Kurse** | Bei fehlendem Live-Kurs wird auf gespeicherte Historien-Kurse zurückgegriffen (`price_fallback.json`) |
+| **HTML-Report** | Interaktiver, selbst-enthaltender Report mit Lazy-Loading – kein Webserver nötig |
+| **Excel-Export** | Auswertung in 6 Sheets: Depotwerte, Datengrundlage, Aktien, ETFs, Sektoren, Länder |
+| **Diversifikations-Score** | HHI-Metrik mit Qualitätsstufe, Anzahl Positionen, Sektoren und Länder |
+| **Log-Rotation** | Haupt-Log (`portfolio_analysis.log`) + separater Error-Log (`portfolio_errors.log`) |
+
+### Charts im HTML-Report
+
+1. **Depotübersicht** – Sortierbare & filterbare Tabelle aller Positionen
+2. **Übersicht nach Depot** – Kreisdiagramm nach Depotposition
+3. **Kapitalverteilung: Anlageart → Position** – Treemap: ETF / Aktie / Krypto / Cash
+4. **Top 20 Positionen** – Balkendiagramm inkl. ETF-Durchblick (Cash enthalten)
+5. **Länder-Treemap** – Hierarchie: Land → Einzelposition (Hover: Anteil Depot + Anteil Kategorie)
+6. **Sektor-Heatmap** – Überschneidungen und Klumpenrisiken je ETF / Assetklasse
+7. **Treemap: Sektor → Position** – Hierarchische Sektoransicht inkl. ETF-Durchblick (Hover: Anteil Depot + Anteil Kategorie)
+
+---
+
+## 📁 Projektstruktur
+
 ```
-`Cash` should be added as a security with the ticker `-`. `Anteile` should be the amount of cash in the portfolio.
+ishares_etf_portfolio_analysis/
+│
+├── main.py                     # Einstiegspunkt
+├── .env                        # Konfiguration (Pfade, URLs, Ticker-Suffixe)
+├── requirements.txt
+├── ruff.toml                   # Linter-Konfiguration
+├── price_fallback.json         # Automatisch erstellt – gespeicherte Fallback-Kurse
+├── portfolio_analysis.log      # Haupt-Log (rotierend, max. 5 MB)
+├── portfolio_errors.log        # Nur WARNINGs und ERRORs (rotierend, max. 2 MB)
+│
+├── example_portfolio.xlsx      # Beispiel-Depotdatei
+├── iShares_CSV_download_path.png
+│
+└── scripts/
+    ├── data_download.py        # CSV- und Kurs-Download
+    ├── data_processing.py      # Bereinigung, Normalisierung, Gewichtungsberechnung
+    ├── file_handling.py        # Excel-Import/-Export
+    └── plotting.py             # Chart-Erstellung & HTML-Report-Export
 
-## **Globale variables: Import folder paths, URLs, Names for CSV files and ticker suffixe**
-For easier handling, the global variables are stored in a `.env` file. The file should be saved in the same folder as the script.
+tests/
+    ├── test_data_processing.py # Tests: Normalisierung, Mapping, Gewichtungsberechnung
+    ├── test_data_download.py   # Tests: Fallback-JSON, CSV-Download (gemockt)
+    ├── test_file_handling.py   # Tests: Excel-Import/-Export, ETF-CSV lesen
+    └── test_plotting.py        # Tests: Zahlenformat, Chart-Figures, HTML-Tabelle
+```
 
-### **How to set up the `.env` file?**
-The .env file makes it easy to change configurations such as paths and URLs without having to change the code.
+---
 
-The `.env` file should look like this:
+## 🚀 Einrichtung & Ausführung
+
+### 1. Abhängigkeiten installieren
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. `.env`-Datei erstellen
+
+Erstelle eine `.env`-Datei im Projektordner mit folgendem Inhalt:
+
 ```dotenv
-FOLDER_PATH="path to the folder where the files should be stored"
-DOWNLOAD_PATH="${FOLDER_PATH}\\downloadfiles"
-SAVE_PATH="${FOLDER_PATH}\\outputfiles"
-INPUT_FILE="${FOLDER_PATH}\\portfolio.xlsx"
-OUTPUT_FILE="${SAVE_PATH}\\stockoverview.xlsx"
-CSV_URL="https://example.com/etf1.csv, https://example.com/etf2.csv"
-ETF_CSV_FILE="ETF_1.csv, ETF_2.csv"
-STOCK_TICKER_SUFFIXES="stock ticker suffix1, stock ticker suffix2, stock ticker suffix3"
-CRYPTO_TICKER_SUFFIXES="crypto ticker suffix1, crypto ticker suffix2, crypto ticker suffix3"
+# Basis-Pfad (wird in den anderen Variablen wiederverwendet)
+FOLDER_PATH="C:\Dein\Pfad\Depotaufteilung"
+
+# Unterverzeichnisse (werden automatisch erstellt falls nicht vorhanden)
+DOWNLOAD_PATH="${FOLDER_PATH}\downloadfiles"
+SAVE_PATH="${FOLDER_PATH}\outputfiles"
+
+# Eingabe- und Ausgabedateien
+INPUT_FILE="${FOLDER_PATH}\portfolio.xlsx"
+OUTPUT_FILE="${SAVE_PATH}\stockoverview.xlsx"
+
+# iShares ETF CSV-Download-URLs (Reihenfolge muss mit ETF_CSV_FILE übereinstimmen)
+CSV_URL="https://...etf1.csv, https://...etf2.csv"
+ETF_CSV_FILE="iShares ETF 1.csv, iShares ETF 2.csv"
+
+# Ticker-Suffixe für Yahoo Finance (mehrere durch Komma trennen)
+STOCK_TICKER_SUFFIXES=".DE, .F"        # Xetra zuerst, Frankfurt als Fallback
+CRYPTO_TICKER_SUFFIXES="-EUR"          # Krypto in Euro
 ```
-- `CSV_URL` should be the URL of the iShares ETF CSV files. You can find the URLs on the BlackRock website.
-![iShares_CSV_download_path.png](iShares_CSV_download_path.png)
-- `ETF_CSV_FILE` and `CSV_URL` have to be in the same order. Separate the URLs and the file names with a comma. Add as many URLs and file names as you need.
-- `STOCK_TICKER_SUFFIXES` and `CRYPTO_TICKER_SUFFIXES` are optional. Default is `.DE` for Xetra and `-EUR` for crypto in Euro**. If you want to add more suffixes, separate them with a comma.
 
-## **How to run the script?**
+> **Wo finde ich die CSV-URLs?**  
+> Auf der BlackRock/iShares-Produktseite des jeweiligen ETFs → Button „Alle Positionen herunterladen" → Rechtsklick → Link kopieren.  
+> ![CSV Download Pfad](iShares_CSV_download_path.png)
 
-1. Set up the `.env` file.
-2. Create the folder structure as specified in the `.env` file (especially the folders `outputfiles` and `downloadfiles`).
-3. Save the `portfolio.xlsx` file in the folder specified in the `.env` file.
-4. Run the script. 
-5. The charts will be saved in the folder specified in the `.env` file and open automatically in your browser.
-6. Check the `stockoverview.xlsx` file in the folder specified in the `.env` file. 
-7. Done!
-8. If you want to run the script again you are overwriting the `stockoverview.xlsx` file and the charts.
-9. The ETF CSV files will only be downloaded if they are not already in the download folder or are older than 30 day (Interval can be changed via`download_csv_if_old(...,...,max_age_days= ?)` in `main.py`).
+### 3. `portfolio.xlsx` erstellen
+
+Speichere deine Depotpositionen in einer Excel-Datei unter `INPUT_FILE`. Pflicht-Spalten:
+
+| Spalte | Beschreibung | Beispiel |
+|---|---|---|
+| `Ticker` | Yahoo Finance Ticker **ohne** Suffix. Für Cash: `-` | `2B7K`, `AAPL`, `BTC`, `-` |
+| `Art` | Assetklasse | `ETF`, `Aktie`, `Krypto`, `Cash` |
+| `Position` | Name der Position. Bei ETFs **exakt** wie der CSV-Dateiname (ohne `.csv`) | `iShares MSCI World SRI ETF` |
+| `Sektor` | Sektor (nur für Einzelaktien relevant, bei ETFs `-`) | `Technologie`, `-` |
+| `Standort` | Land (nur für Einzelaktien relevant, bei ETFs `-`) | `USA`, `Frankreich`, `-` |
+| `Anteile` | Anzahl Anteile. Bei Cash: Betrag in Euro | `100`, `2500.00` |
+
+**Beispiel:**
+
+| Ticker | Art | Position | Sektor | Standort | Anteile |
+|---|---|---|---|---|---|
+| `-` | Cash | Cash | Cash und/oder Derivate | Cash (Euro) | 2500 |
+| `2B7K` | ETF | iShares MSCI World SRI ETF | - | - | 500 |
+| `QDVW` | ETF | iShares MSCI World Quality Dividend ESG ETF | - | - | 200 |
+| `BTC` | Krypto | Bitcoin | Krypto | Krypto | 0.01 |
+| `AAPL` | Aktie | Apple Inc. | Technologie | USA | 10 |
+
+> Eine vollständige Beispieldatei liegt im Repository: [`example_portfolio.xlsx`](example_portfolio.xlsx)
+
+### 4. Script ausführen
+
+```bash
+python main.py
+```
+
+Der Report öffnet sich automatisch im Browser. Ausgaben:
+
+| Datei | Beschreibung |
+|---|---|
+| `{SAVE_PATH}/portfolio_report.html` | Interaktiver HTML-Report |
+| `{SAVE_PATH}/stockoverview.xlsx` | Excel-Auswertung (6 Sheets) |
+
+---
+
+## ⚙️ Konfigurationsoptionen
+
+### ETF-CSV-Aktualisierungsintervall
+
+Die ETF-CSV-Dateien werden nur heruntergeladen wenn sie älter als 30 Tage sind. Das Intervall lässt sich in `main.py` anpassen:
+
+```python
+download_csv_if_old(CSV_URL, DOWNLOAD_PATH, ETF_CSV_FILE, max_age_days=30)
+```
+
+### Fallback-Kurse (`price_fallback.json`)
+
+Wird automatisch erstellt und bei jedem erfolgreichen Kurs-Download aktualisiert. Falls Yahoo Finance keinen Kurs liefert (z.B. bei delisteten Krypto-Tokens), wird der zuletzt gespeicherte Kurs verwendet.
+
+Initiale Standardwerte:
+```json
+{
+  "MATIC": 0.10
+}
+```
+
+### Ticker-Suffixe
+
+Das Script probiert die konfigurierten Suffixe der Reihe nach aus (Batch-Download, dann Einzel-Fallback):
+- `STOCK_TICKER_SUFFIXES=".DE, .F"` → zuerst Xetra (`.DE`), dann Frankfurt (`.F`)
+- `CRYPTO_TICKER_SUFFIXES="-EUR"` → Krypto in Euro
+
+---
+
+## 📋 Logging
+
+| Datei | Inhalt | Max. Größe |
+|---|---|---|
+| `portfolio_analysis.log` | Alle INFO+ Ereignisse (Meilensteine, Zusammenfassungen) | 5 MB, 3 Backups |
+| `portfolio_errors.log` | Nur WARNING+ (Fehler, Fallback-Kurse, fehlende Daten) | 2 MB, 2 Backups |
+
+Für detailliertes Debugging kann der Log-Level temporär auf `DEBUG` gesetzt werden – dann werden auch Einzelkurse, Ticker-Listen und DataFrame-Inhalte geloggt.
+
+---
+
+## 🔧 Troubleshooting
+
+| Problem | Ursache | Lösung |
+|---|---|---|
+| `Fehlende Pflicht-Umgebungsvariablen` | `.env` unvollständig | Alle Pflicht-Variablen prüfen (siehe Abschnitt `.env`) |
+| `ETF '...' nicht in ETF-CSV-Daten gefunden` | `Position`-Name in `portfolio.xlsx` weicht vom CSV-Dateinamen ab | Namen exakt angleichen (ohne `.csv`-Extension) |
+| `Kein Live-Kurs für '...' – Fallback verwendet` | Ticker bei Yahoo Finance nicht gefunden oder delistet | Ticker in `price_fallback.json` manuell aktualisieren oder Ticker in `.env` anpassen |
+| Charts laden nicht im Browser | Browser blockiert großes Inline-JS bei `file://` (Firefox) | Report in Edge/Chrome öffnen oder Script neu ausführen |
+| `OSError: Invalid argument` beim Excel-Lesen | Excel-Datei ist aktuell geöffnet und gesperrt | Excel-Datei schließen und Script neu starten |
+
+---
+
+## 🛠️ Entwickler-Hinweise
+
+### Tests ausführen
+
+```bash
+pytest tests/ -v
+```
+
+### Linting (Ruff)
+
+```bash
+ruff check .
+```
+
+Die Konfiguration liegt in `ruff.toml`. Geprüft werden: pyflakes, pycodestyle, isort, pyupgrade, bugbear und flake8-simplify.
+
+| Testdatei | Abgedeckte Bereiche |
+|---|---|
+| `test_data_processing.py` | `_normalize_str`, `clean_etf_data`, `calculate_relative_weighting`, Mapping-Konsistenz |
+| `test_data_download.py` | Fallback-JSON (lesen/schreiben/korrupt), CSV-Download (gemockt), Netzwerkfehler |
+| `test_file_handling.py` | `read_etf_data`, `export_to_excel` (alle Sheets, leere DFs, Fehlerbehandlung) |
+| `test_plotting.py` | Deutsches Zahlenformat `_de`, HTML-Tabelle, alle Chart-Figure-Builder |
+
+> Alle Netzwerkaufrufe (yFinance, HTTP) werden in den Tests mit `unittest.mock` gemockt – kein Internetzugang nötig.
+
+### Neue ETFs hinzufügen
+
+1. CSV-URL der iShares-Produktseite kopieren (siehe Screenshot oben)
+2. In `.env` ergänzen – **Reihenfolge** von `CSV_URL` und `ETF_CSV_FILE` muss übereinstimmen:
+   ```dotenv
+   CSV_URL="..., https://neuer-etf.csv"
+   ETF_CSV_FILE="..., iShares Neuer ETF.csv"
+   ```
+3. In `portfolio.xlsx` eine neue Zeile mit `Art = ETF` und `Position` = exakter Dateiname ohne `.csv` eintragen
+
+### Neue Sektoren oder Länder ergänzen
+
+Unbekannte Werte werden automatisch als `'Sonstige'` gruppiert und im Log als `WARNING` gemeldet:
+```
+WARNING  scripts.data_processing – Nicht aufgelöste Länder → 'Sonstige': {'Neues Land': 5}
+```
+Mapping in `scripts/data_processing.py` ergänzen:
+```python
+# LOCATION_MAPPING
+"Neues Land": "Neues Land",          # Identity-Mapping (korrekte Schreibweise)
+"New Country": "Neues Land",         # Englischer Aliasname
+```
+
+### Debugging
+
+Log-Level in `main.py` auf `DEBUG` setzen um vollständige DataFrames, Einzelkurse und Ticker-Listen zu sehen:
+```python
+fh.setLevel(logging.DEBUG)   # Haupt-Log-Handler
+sh.setLevel(logging.DEBUG)   # Console-Handler
+```
+Alternativ `portfolio_errors.log` prüfen – enthält alle WARNINGs und ERRORs kompakt.
+
+### Architektur-Überblick
+
+```
+main.py
+  │
+  ├── data_download.py     → ETF-CSVs + Kurse via yFinance
+  │       └── price_fallback.json  (persistente Fallback-Kurse)
+  │
+  ├── data_processing.py   → Bereinigung, Mapping, ETF-Gewichtungsberechnung
+  │
+  ├── file_handling.py     → Excel lesen/schreiben
+  │
+  └── plotting.py          → Chart-Figures + HTML-Report-Export
+          └── portfolio_report.html  (self-contained, Plotly inline)
+```
+
+---
+
+## 📦 Abhängigkeiten
+
+```
+pandas>=2.3
+numpy>=2.0
+openpyxl>=3.1
+yfinance>=1.0
+requests>=2.31
+urllib3>=2.0
+python-dotenv>=1.0
+plotly>=6.0
+
+# Dev-Dependencies
+pytest>=8.0
+ruff>=0.4
+```

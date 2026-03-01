@@ -1,0 +1,29 @@
+# Ruff-Konfiguration – https://docs.astral.sh/ruff/
+# Ausführen: ruff check .
+
+target-version = "py311"
+line-length    = 120
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes (unused imports, undefined names, …)
+    "I",   # isort (Import-Reihenfolge)
+    "UP",  # pyupgrade (moderne Python-Syntax)
+    "B",   # flake8-bugbear (häufige Bugs)
+    "C4",  # flake8-comprehensions (unnötige Comprehensions)
+    "SIM", # flake8-simplify (vereinfachbare Ausdrücke)
+]
+ignore = [
+    "E501",   # line too long – durch line-length = 120 geregelt
+    "SIM108", # ternary statt if/else – manchmal schlechter lesbar
+]
+
+# Kein Linting für .venv und generierte Dateien
+exclude = [
+    ".venv",
+    "__pycache__",
+    ".git",
+]
+
