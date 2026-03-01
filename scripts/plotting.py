@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
 
+
 def _de(val, decimals=2, unit=""):
     """Formatiert Zahlen im deutschen Format (Punkt = Tausender, Komma = Dezimal)."""
     if not isinstance(val, (int, float)) or pd.isna(val):
@@ -43,6 +44,7 @@ def _pct(val, decimals=1):
 # ---------------------------------------------------------------------------
 # Figure-Builder – erstellen nur die Plotly-Figure, kein I/O
 # ---------------------------------------------------------------------------
+
 
 def build_depot_table(depot_df):
     """
@@ -90,7 +92,9 @@ def build_depot_table(depot_df):
     header_cells = ""
     for i, col in enumerate(cols):
         dtype = "num" if col in numeric_cols else "str"
-        header_cells += f'<th data-col="{i}" data-type="{dtype}" class="sortable">{col} <span class="sort-icon">↕</span></th>'
+        header_cells += (
+            f'<th data-col="{i}" data-type="{dtype}" class="sortable">{col} <span class="sort-icon">↕</span></th>'
+        )
 
     # Zeilen mit data-sort-Attributen für numerische Zellen – vektorisiert statt iterrows()
     cols = list(df.columns)
@@ -99,12 +103,11 @@ def build_depot_table(depot_df):
         if col in numeric_cols and col in raw_values:
             raws = raw_values[col]
             vals = df[col].tolist()
-            td_parts.append([
-                f'<td data-sort="{r if pd.notna(r) else -1e18}">{v}</td>'
-                for r, v in zip(raws, vals, strict=True)
-            ])
+            td_parts.append(
+                [f'<td data-sort="{r if pd.notna(r) else -1e18}">{v}</td>' for r, v in zip(raws, vals, strict=True)]
+            )
         else:
-            td_parts.append([f'<td>{v}</td>' for v in df[col].tolist()])
+            td_parts.append([f"<td>{v}</td>" for v in df[col].tolist()])
 
     rows = ""
     for i in range(len(df)):
@@ -131,12 +134,13 @@ def build_pie_chart(df, values, names, title):
     fig = px.pie(df, values=values, names=names, title=title)
     fig.update_traces(
         customdata=df[values].apply(lambda v: _de(v, 2, "%")),
-        texttemplate='%{label}<br>%{customdata}',
-        textposition='inside',
-        hovertemplate='<b>%{label}</b><br>Depotanteil: %{customdata}<extra></extra>',
+        texttemplate="%{label}<br>%{customdata}",
+        textposition="inside",
+        hovertemplate="<b>%{label}</b><br>Depotanteil: %{customdata}<extra></extra>",
     )
-    fig.update_layout(showlegend=True, title_font_size=18, height=650, width=900,
-                      margin={'t': 60, 'b': 20, 'l': 20, 'r': 20})
+    fig.update_layout(
+        showlegend=True, title_font_size=18, height=650, width=900, margin={"t": 60, "b": 20, "l": 20, "r": 20}
+    )
     return fig
 
 
@@ -145,27 +149,25 @@ def build_bar_chart(df, x, y, title, top_n=20):
     Passt den linken Margin dynamisch an die längste Y-Beschriftung an.
     """
     df_top = df.nlargest(top_n, x).copy()
-    df_top['_label'] = df_top[x].apply(lambda v: _de(v, 2, "%"))
+    df_top["_label"] = df_top[x].apply(lambda v: _de(v, 2, "%"))
 
     max_label_len = df_top[y].astype(str).str.len().max() if not df_top.empty else 20
     left_margin = min(max(int(max_label_len * 7), 120), 400)
 
-    fig = px.bar(df_top, x=x, y=y, orientation='h', title=title,
-                 text='_label',
-                 hover_data={x: ':.2f', '_label': False})
+    fig = px.bar(df_top, x=x, y=y, orientation="h", title=title, text="_label", hover_data={x: ":.2f", "_label": False})
     fig.update_traces(
-        textposition='outside',
-        hovertemplate='<b>%{y}</b><br>Gewichtung: %{text}<extra></extra>',
+        textposition="outside",
+        hovertemplate="<b>%{y}</b><br>Gewichtung: %{text}<extra></extra>",
     )
     fig.update_layout(
         yaxis={
-            'categoryorder': 'total ascending',
-            'tickmode': 'linear',
-            'automargin': True,
-            'tickfont': {'size': 12},
+            "categoryorder": "total ascending",
+            "tickmode": "linear",
+            "automargin": True,
+            "tickfont": {"size": 12},
         },
-        xaxis={'ticksuffix': ' %'},
-        margin={'l': left_margin, 'r': 80, 't': 60, 'b': 40},
+        xaxis={"ticksuffix": " %"},
+        margin={"l": left_margin, "r": 80, "t": 60, "b": 40},
         title_font_size=18,
         height=max(400, top_n * 28),
     )
@@ -178,16 +180,15 @@ def build_treemap(df, path_cols, values, title):
     Zeigt für jeden Knoten (Blatt und Eltern) den korrekten Depot-Anteil aus
     den Original-Daten – nicht Plotlys interne percentRoot/percentParent.
     """
-    fig = px.treemap(df, path=path_cols, values=values, title=title,
-                     custom_data=[values])
+    fig = px.treemap(df, path=path_cols, values=values, title=title, custom_data=[values])
 
     # Eltern-Knoten bekommen von px.treemap kein customdata – manuell befüllen.
     # fig.data[0].ids enthält alle Knoten-IDs (z.B. "Technologie", "Technologie/Apple").
     # fig.data[0].customdata hat für Eltern-Knoten NaN → mit Summe der Kinder ersetzen.
     trace = fig.data[0]
-    ids        = list(trace.ids)
-    parents    = list(trace.parents)
-    customdata = list(trace.customdata)   # shape: (n, 1)
+    ids = list(trace.ids)
+    parents = list(trace.parents)
+    customdata = list(trace.customdata)  # shape: (n, 1)
 
     # Summe je Eltern-Knoten aus Kinder-customdata aufbauen
     parent_sums: dict[str, float] = {}
@@ -200,7 +201,7 @@ def build_treemap(df, path_cols, values, title):
     # customdata der Eltern-Knoten setzen
     for i, node_id in enumerate(ids):
         if node_id in parent_sums and (
-            customdata[i][0] != customdata[i][0]   # ist NaN
+            customdata[i][0] != customdata[i][0]  # ist NaN
             or customdata[i][0] == 0.0
         ):
             customdata[i] = [parent_sums[node_id]]
@@ -208,12 +209,12 @@ def build_treemap(df, path_cols, values, title):
     # Kategorie-Anteil: nur für Blatt-Knoten sinnvoll (Eltern-Knoten sind selbst Kategorien)
     # Blatt-Knoten = Knoten der NICHT in parent_sums vorkommt (hat keine Kinder)
     parent_val_map = {node_id: customdata[i][0] for i, node_id in enumerate(ids)}
-    is_parent = set(parent_sums.keys())   # alle Knoten die mindestens ein Kind haben
+    is_parent = set(parent_sums.keys())  # alle Knoten die mindestens ein Kind haben
 
     cd_cat = []
     for i, _node_id in enumerate(ids):
-        pid        = parents[i]
-        node_val   = customdata[i][0] if customdata[i][0] == customdata[i][0] else 0.0
+        pid = parents[i]
+        node_val = customdata[i][0] if customdata[i][0] == customdata[i][0] else 0.0
         parent_val = parent_val_map.get(pid, 0.0) if pid else 0.0
 
         if _node_id not in is_parent and parent_val > 0:
@@ -228,44 +229,49 @@ def build_treemap(df, path_cols, values, title):
     trace.customdata = cd_cat
 
     fig.update_traces(
-        texttemplate='%{label}<br>%{customdata[0]:.2f} %',
+        texttemplate="%{label}<br>%{customdata[0]:.2f} %",
         hovertemplate=(
-            '<b>%{label}</b><br>'
-            'Anteil Depot: %{customdata[0]:.2f} %<br>'
-            'Anteil Kategorie: %{customdata[1]}'
-            '<extra></extra>'
+            "<b>%{label}</b><br>"
+            "Anteil Depot: %{customdata[0]:.2f} %<br>"
+            "Anteil Kategorie: %{customdata[1]}"
+            "<extra></extra>"
         ),
     )
-    fig.update_layout(title_font_size=18, height=700, margin={'t': 60, 'b': 10, 'l': 10, 'r': 10})
+    fig.update_layout(title_font_size=18, height=700, margin={"t": 60, "b": 10, "l": 10, "r": 10})
     return fig
 
 
-def build_heatmap(pivot_df, title, colorscale='Blues'):
+def build_heatmap(pivot_df, title, colorscale="Blues"):
     """Erstellt eine annotierte Heatmap aus einem pivot-DataFrame.
     Zeigt z.B. Sektorgewichtung je ETF/Quelle.
     Zeilen = Sektoren, Spalten = ETF/Assetklasse.
     """
-    z     = pivot_df.values
-    x     = pivot_df.columns.tolist()
-    y     = pivot_df.index.tolist()
+    z = pivot_df.values
+    x = pivot_df.columns.tolist()
+    y = pivot_df.index.tolist()
 
     # Annotationstext: deutsches Format mit %-Zeichen, leer bei 0
-    text = [[(_de(v, 2, "%") if v > 0 else '') for v in row] for row in z]
+    text = [[(_de(v, 2, "%") if v > 0 else "") for v in row] for row in z]
 
-    fig = go.Figure(go.Heatmap(
-        z=z, x=x, y=y,
-        text=text, texttemplate='%{text}',
-        colorscale=colorscale,
-        hoverongaps=False,
-        hovertemplate='<b>%{y}</b> · %{x}<br>Gewichtung: %{text}<extra></extra>',
-        showscale=True,
-    ))
+    fig = go.Figure(
+        go.Heatmap(
+            z=z,
+            x=x,
+            y=y,
+            text=text,
+            texttemplate="%{text}",
+            colorscale=colorscale,
+            hoverongaps=False,
+            hovertemplate="<b>%{y}</b> · %{x}<br>Gewichtung: %{text}<extra></extra>",
+            showscale=True,
+        )
+    )
     fig.update_layout(
-        title={'text': title, 'font': {'size': 18}},
-        xaxis={'tickangle': -30, 'automargin': True},
-        yaxis={'automargin': True},
+        title={"text": title, "font": {"size": 18}},
+        xaxis={"tickangle": -30, "automargin": True},
+        yaxis={"automargin": True},
         height=max(400, len(y) * 40 + 120),
-        margin={'t': 80, 'b': 60, 'l': 160, 'r': 40},
+        margin={"t": 80, "b": 60, "l": 160, "r": 40},
     )
     return fig
 
@@ -273,6 +279,7 @@ def build_heatmap(pivot_df, title, colorscale='Blues'):
 # ---------------------------------------------------------------------------
 # HTML-Report-Export
 # ---------------------------------------------------------------------------
+
 
 def export_html_report(sections, output_file, depot_summary=None):
     """
@@ -289,19 +296,16 @@ def export_html_report(sections, output_file, depot_summary=None):
     now = datetime.now().strftime("%d.%m.%Y %H:%M Uhr")
 
     # Navigationsmenü-Einträge
-    nav_items = "".join(
-        f'<li><a href="#section-{i}">{s["title"]}</a></li>'
-        for i, s in enumerate(sections)
-    )
+    nav_items = "".join(f'<li><a href="#section-{i}">{s["title"]}</a></li>' for i, s in enumerate(sections))
 
     # Kennzahlen-Karten im Header – in drei Gruppen aufgeteilt
     summary_html = ""
     if depot_summary:
         # Gruppen: Depot-Übersicht | Assetklassen | Qualität & Warnungen
         group_keys = {
-            "depot":    ["Gesamtwert", "Positionen"],
-            "assets":   ["ETF-Anteil", "Aktien-Anteil", "Krypto-Anteil", "Cash-Anteil"],
-            "quality":  ["Diversifikation"],
+            "depot": ["Gesamtwert", "Positionen"],
+            "assets": ["ETF-Anteil", "Aktien-Anteil", "Krypto-Anteil", "Cash-Anteil"],
+            "quality": ["Diversifikation", "Top-5-Konzentration"],
         }
         # Alle Keys die keiner Gruppe zugeordnet sind (z.B. Fallback-Warnung) → extra
         assigned = {k for keys in group_keys.values() for k in keys}
@@ -310,10 +314,7 @@ def export_html_report(sections, output_file, depot_summary=None):
         def _card(k, v):
             is_warning = "⚠️" in str(k) or "⚠️" in str(v)
             cls = "kpi-card kpi-warning" if is_warning else "kpi-card"
-            return (f'<div class="{cls}">'
-                    f'<div class="kpi-value">{v}</div>'
-                    f'<div class="kpi-label">{k}</div>'
-                    f'</div>')
+            return f'<div class="{cls}"><div class="kpi-value">{v}</div><div class="kpi-label">{k}</div></div>'
 
         groups_html = ""
         for _gname, keys in group_keys.items():
@@ -327,14 +328,14 @@ def export_html_report(sections, output_file, depot_summary=None):
 
         summary_html = f'<div class="kpi-row">{groups_html}</div>'
 
-    sections_html  = ""
-    plotlyjs_tag   = ""
-    chart_payloads = []   # [(div_id, fig_json)]
+    sections_html = ""
+    plotlyjs_tag = ""
+    chart_payloads = []  # [(div_id, fig_json)]
 
     # Plotly.js einmalig inline einbetten (kein CDN, keine file://-Probleme)
     _plotlyjs_path = Path(plotly.__file__).parent / "package_data" / "plotly.min.js"
     if _plotlyjs_path.exists():
-        plotlyjs_tag = f'<script>{_plotlyjs_path.read_text(encoding="utf-8")}</script>'
+        plotlyjs_tag = f"<script>{_plotlyjs_path.read_text(encoding='utf-8')}</script>"
         logger.debug(f"Plotly.js lokal eingebettet: {_plotlyjs_path}")
     else:
         plotlyjs_tag = '<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>'
@@ -344,13 +345,14 @@ def export_html_report(sections, output_file, depot_summary=None):
         )
 
     for i, section in enumerate(sections):
-        desc_html = (f'<p class="section-desc">{section["description"]}</p>'
-                     if section.get("description") else "")
+        desc_html = f'<p class="section-desc">{section["description"]}</p>' if section.get("description") else ""
 
         if "fig" in section and section["fig"] is not None:
             div_id = f"plotly-chart-{i}"
             chart_payloads.append((div_id, section["fig"].to_json()))
-            content_html = f'<div id="{div_id}" class="plotly-lazy"><div class="chart-placeholder">⏳ Wird geladen…</div></div>'
+            content_html = (
+                f'<div id="{div_id}" class="plotly-lazy"><div class="chart-placeholder">⏳ Wird geladen…</div></div>'
+            )
 
         elif "html" in section:
             content_html = section["html"]
@@ -359,15 +361,14 @@ def export_html_report(sections, output_file, depot_summary=None):
 
         sections_html += (
             f'<section id="section-{i}" class="chart-section">'
-            f'<h2>{section["title"]}</h2>{desc_html}'
+            f"<h2>{section['title']}</h2>{desc_html}"
             f'<div class="chart-container">{content_html}</div>'
-            f'</section>\n'
+            f"</section>\n"
         )
 
     # Chart-JSON als type=application/json – Browser parst kein JS, blockiert keinen Paint
     chart_data_tags = "\n    ".join(
-        f'<script type="application/json" id="data-{did}">{fjson}</script>'
-        for did, fjson in chart_payloads
+        f'<script type="application/json" id="data-{did}">{fjson}</script>' for did, fjson in chart_payloads
     )
     chart_div_ids = json.dumps([did for did, _ in chart_payloads])
 

@@ -29,18 +29,32 @@ Die Ergebnisse werden als **interaktiver HTML-Report** (Pie-Charts, Treemaps, Ba
 | **Fallback-Kurse** | Bei fehlendem Live-Kurs wird auf gespeicherte Historien-Kurse zurückgegriffen (`price_fallback.json`) |
 | **HTML-Report** | Interaktiver, selbst-enthaltender Report mit Lazy-Loading – kein Webserver nötig |
 | **Excel-Export** | Auswertung in 6 Sheets: Depotwerte, Datengrundlage, Aktien, ETFs, Sektoren, Länder |
-| **Diversifikations-Score** | HHI-Metrik mit Qualitätsstufe, Anzahl Positionen, Sektoren und Länder |
+| **Diversifikations-Score (HHI)** | HHI-Metrik (Skala 0–100, FTC/DoJ-Standard) mit Qualitätsstufe, Positionen, Sektoren, Ländern |
+| **Top-5-Konzentration** | Anteil der 5 größten Positionen am Gesamtdepot (inkl. ETF-Durchblick), mit ⚠️ bei > 40 % |
+| **Robuste Fehlerbehandlung** | Explizite Warnungen bei fehlenden Kursen, falschem `.env`-Setup oder unvollständigen Metadaten |
 | **Log-Rotation** | Haupt-Log (`portfolio_analysis.log`) + separater Error-Log (`portfolio_errors.log`) |
+
+### KPI-Cards im HTML-Report
+
+Der Report zeigt oben drei Gruppen von Kennzahlen:
+
+| Gruppe | Cards |
+|---|---|
+| **Depot-Übersicht** | Gesamtwert · Positionen (ETFs / Aktien / Krypto / Cash) |
+| **Assetklassen** | ETF-Anteil · Aktien-Anteil · Krypto-Anteil · Cash-Anteil |
+| **Qualität** | Diversifikation (HHI) · Top-5-Konzentration |
+
+Bei fehlenden Live-Kursen erscheint zusätzlich eine ⚠️-Karte mit den betroffenen Tickern.
 
 ### Charts im HTML-Report
 
 1. **Depotübersicht** – Sortierbare & filterbare Tabelle aller Positionen
 2. **Übersicht nach Depot** – Kreisdiagramm nach Depotposition
 3. **Kapitalverteilung: Anlageart → Position** – Treemap: ETF / Aktie / Krypto / Cash
-4. **Top 20 Positionen** – Balkendiagramm inkl. ETF-Durchblick (Cash enthalten)
+4. **Top 20 Positionen** – Balkendiagramm inkl. ETF-Durchblick
 5. **Länder-Treemap** – Hierarchie: Land → Einzelposition (Hover: Anteil Depot + Anteil Kategorie)
 6. **Sektor-Heatmap** – Überschneidungen und Klumpenrisiken je ETF / Assetklasse
-7. **Treemap: Sektor → Position** – Hierarchische Sektoransicht inkl. ETF-Durchblick (Hover: Anteil Depot + Anteil Kategorie)
+7. **Treemap: Sektor → Position** – Hierarchische Sektoransicht inkl. ETF-Durchblick
 
 ---
 
@@ -197,8 +211,11 @@ Für detailliertes Debugging kann der Log-Level temporär auf `DEBUG` gesetzt we
 | Problem | Ursache | Lösung |
 |---|---|---|
 | `Fehlende Pflicht-Umgebungsvariablen` | `.env` unvollständig | Alle Pflicht-Variablen prüfen (siehe Abschnitt `.env`) |
+| `CSV_URL (n) und ETF_CSV_FILE (m) haben unterschiedlich viele Einträge` | Anzahl URLs und Dateinamen in `.env` stimmt nicht überein | Reihenfolge und Anzahl von `CSV_URL` und `ETF_CSV_FILE` angleichen |
 | `ETF '...' nicht in ETF-CSV-Daten gefunden` | `Position`-Name in `portfolio.xlsx` weicht vom CSV-Dateinamen ab | Namen exakt angleichen (ohne `.csv`-Extension) |
+| `Einzelaktie(n) ohne Sektor/Standort` | `Sektor`/`Standort`-Spalte in `portfolio.xlsx` leer oder `-` | Sektor und Standort für Einzelaktien in `portfolio.xlsx` eintragen |
 | `Kein Live-Kurs für '...' – Fallback verwendet` | Ticker bei Yahoo Finance nicht gefunden oder delistet | Ticker in `price_fallback.json` manuell aktualisieren oder Ticker in `.env` anpassen |
+| `Gesamtwert ist 0` – Abbruch | Alle Kurse konnten nicht geladen werden | Netzwerkverbindung und Ticker-Suffixe in `.env` prüfen |
 | Charts laden nicht im Browser | Browser blockiert großes Inline-JS bei `file://` (Firefox) | Report in Edge/Chrome öffnen oder Script neu ausführen |
 | `OSError: Invalid argument` beim Excel-Lesen | Excel-Datei ist aktuell geöffnet und gesperrt | Excel-Datei schließen und Script neu starten |
 
@@ -251,6 +268,46 @@ Mapping in `scripts/data_processing.py` ergänzen:
 "Neues Land": "Neues Land",          # Identity-Mapping (korrekte Schreibweise)
 "New Country": "Neues Land",         # Englischer Aliasname
 ```
+
+### Diversifikations-Score (HHI) & Top-5-Konzentration
+
+Der **Herfindahl-Hirschman Index (HHI)** misst die Konzentration des Depots. Grundlage ist der ETF-Durchblick (`depot_data_stocks`) – jede Einzelposition erscheint mit ihrem tatsächlichen anteiligen Gewicht, ETFs werden also aufgelöst.
+
+**Berechnung HHI:**
+
+```
+s_i   = normalisierter Anteil der Position i (in %, Summe = 100)
+HHI   = Σ s_i²          → Standard-Skala 0–10.000  (FTC/DoJ Merger Guidelines 2023)
+HHI*  = HHI / 100       → Skaliert auf 0–100        (Anzeige im Report)
+```
+
+**Beispiel (FTC):** Vier Firmen mit 30 / 30 / 20 / 20 % → HHI = 30² + 30² + 20² + 20² = 2.600
+
+**Schwellenwerte** (FTC/DoJ Merger Guidelines 2023):
+
+| HHI* (0–100) | Äquivalent Standard (0–10.000) | Bewertung |
+|---|---|---|
+| < 10 | < 1.000 | Nicht konzentriert |
+| 10–18 | 1.000–1.800 | Mäßig konzentriert |
+| > 18 | > 1.800 | Hoch konzentriert |
+
+**Berechnung Top-5-Konzentration:**
+
+Summe der 5 größten normalisierten Gewichte aus `depot_data_stocks`. Zeigt ⚠️ wenn die Top-5-Positionen mehr als 40 % des Gesamtdepots ausmachen. Die Namen der drei größten Positionen werden in der Subzeile der Card angezeigt.
+
+> Technische Details: `weights_pct = weights / weights.sum() * 100` → `hhi_raw = Σ(weights_pct²)` → `hhi_score = hhi_raw / 100`
+
+### Filterkonstanten (`EXCL_SECTORS` / `EXCL_LOCATIONS`)
+
+Die Konstanten für das Herausfiltern von Cash, Krypto und Derivaten aus Charts sind zentral in `scripts/data_processing.py` definiert und werden in `main.py` importiert – nicht dupliziert:
+
+```python
+# scripts/data_processing.py
+EXCL_SECTORS   = {'-', 'nan', 'Cash und/oder Derivate', 'Cash and/or Derivatives'}
+EXCL_LOCATIONS = {'-', 'nan', 'Krypto', 'Cash', 'Cash (Euro)'}
+```
+
+Falls neue Cash- oder Derivate-Bezeichnungen aus iShares-CSVs auftauchen, nur hier ergänzen.
 
 ### Debugging
 

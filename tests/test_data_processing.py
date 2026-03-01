@@ -24,14 +24,15 @@ from scripts.data_processing import (
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
 
+
 def _make_etf_df(**overrides):
     """Erstellt ein minimales gültiges ETF-DataFrame für Tests."""
     data = {
-        "ETF":          ["Test ETF", "Test ETF"],
-        "Name":         ["Apple Inc.", "Microsoft Corp."],
+        "ETF": ["Test ETF", "Test ETF"],
+        "Name": ["Apple Inc.", "Microsoft Corp."],
         "Gewichtung (%)": [5.0, 3.0],
-        "Sektor":       ["Information Technology", "Information Technology"],
-        "Standort":     ["United States", "United States"],
+        "Sektor": ["Information Technology", "Information Technology"],
+        "Standort": ["United States", "United States"],
         "Anlageklasse": ["Aktien", "Aktien"],
     }
     data.update(overrides)
@@ -41,10 +42,10 @@ def _make_etf_df(**overrides):
 def _make_depot_df(**overrides):
     """Erstellt ein minimales gültiges Depot-DataFrame für Tests."""
     data = {
-        "Art":          ["ETF", "Aktie", "Cash"],
-        "Position":     ["Test ETF", "Apple Inc.", "Cash"],
-        "Ticker":       ["TST", "AAPL", "-"],
-        "Anteile":      [100.0, 10.0, 1000.0],
+        "Art": ["ETF", "Aktie", "Cash"],
+        "Position": ["Test ETF", "Apple Inc.", "Cash"],
+        "Ticker": ["TST", "AAPL", "-"],
+        "Anteile": [100.0, 10.0, 1000.0],
         "Marktwert (%)": [50.0, 30.0, 20.0],
     }
     data.update(overrides)
@@ -54,6 +55,7 @@ def _make_depot_df(**overrides):
 # ---------------------------------------------------------------------------
 # Tests: _normalize_str
 # ---------------------------------------------------------------------------
+
 
 class TestNormalizeStr:
     def test_entfernt_non_breaking_space(self):
@@ -86,10 +88,7 @@ class TestNormalizeStr:
 
 class TestCleanEtfData:
     def test_nullzeilen_name_werden_entfernt(self):
-        df = _make_etf_df(
-            Name=["Apple", None],
-            **{"Gewichtung (%)": [5.0, 3.0]}
-        )
+        df = _make_etf_df(Name=["Apple", None], **{"Gewichtung (%)": [5.0, 3.0]})
         result = clean_etf_data(df)
         assert result["Name"].notna().all()
         assert len(result) == 1
@@ -110,26 +109,33 @@ class TestCleanEtfData:
         assert set(result["Sektor"].unique()) <= {"Technologie", "Gesundheit"}
 
     def test_sektor_mapping_encoding_variante(self):
-        df = _make_etf_df(
-            Sektor=["Zyklische Konsumgter", "Zyklische Konsumgter"],
-            **{"Gewichtung (%)": [2.0, 1.0]}
-        )
+        df = _make_etf_df(Sektor=["Zyklische Konsumgter", "Zyklische Konsumgter"], **{"Gewichtung (%)": [2.0, 1.0]})
         result = clean_etf_data(df)
         assert "Zyklischer Konsum" in result["Sektor"].values
 
     def test_alle_deutschen_sektornamen_bleiben_unveraendert(self):
         """Deutsche Sektornamen die bereits korrekt sind sollen nicht verändert werden."""
-        bekannte = ["Technologie", "Finanzen", "Gesundheit", "Industrie",
-                    "Immobilien", "Energie", "Rohstoffe", "Versorger"]
+        bekannte = [
+            "Technologie",
+            "Finanzen",
+            "Gesundheit",
+            "Industrie",
+            "Immobilien",
+            "Energie",
+            "Rohstoffe",
+            "Versorger",
+        ]
         rows = len(bekannte)
-        df = pd.DataFrame({
-            "ETF":            ["Test ETF"] * rows,
-            "Name":           [f"Firma {i}" for i in range(rows)],
-            "Gewichtung (%)": [1.0] * rows,
-            "Sektor":         bekannte,
-            "Standort":       ["United States"] * rows,
-            "Anlageklasse":   ["Aktien"] * rows,
-        })
+        df = pd.DataFrame(
+            {
+                "ETF": ["Test ETF"] * rows,
+                "Name": [f"Firma {i}" for i in range(rows)],
+                "Gewichtung (%)": [1.0] * rows,
+                "Sektor": bekannte,
+                "Standort": ["United States"] * rows,
+                "Anlageklasse": ["Aktien"] * rows,
+            }
+        )
         result = clean_etf_data(df)
         for sektor in bekannte:
             assert sektor in result["Sektor"].values, f"Sektor '{sektor}' fehlt nach clean_etf_data"
@@ -206,41 +212,38 @@ class TestCleanEtfData:
 # Tests: calculate_relative_weighting
 # ---------------------------------------------------------------------------
 
+
 class TestCalculateRelativeWeighting:
     def test_grundlegende_gewichtungsberechnung(self):
         """ETF mit 50% Depotgewicht: Position mit 10% ETF-Gewichtung → 5% relativ."""
-        etf_df = pd.DataFrame({
-            "ETF":           ["Test ETF", "Test ETF"],
-            "Name":          ["Apple", "Microsoft"],
-            "Gewichtung (%)": [10.0, 6.0],
-        })
-        depot_df = pd.DataFrame({
-            "Art":           ["ETF"],
-            "Position":      ["Test ETF"],
-            "Marktwert (%)": [50.0],
-        })
+        etf_df = pd.DataFrame(
+            {
+                "ETF": ["Test ETF", "Test ETF"],
+                "Name": ["Apple", "Microsoft"],
+                "Gewichtung (%)": [10.0, 6.0],
+            }
+        )
+        depot_df = pd.DataFrame(
+            {
+                "Art": ["ETF"],
+                "Position": ["Test ETF"],
+                "Marktwert (%)": [50.0],
+            }
+        )
         result, msg = calculate_relative_weighting(etf_df, depot_df)
         assert abs(result.loc[result["Name"] == "Apple", "relative Gewichtung (%)"].values[0] - 5.0) < 0.001
         assert abs(result.loc[result["Name"] == "Microsoft", "relative Gewichtung (%)"].values[0] - 3.0) < 0.001
 
     def test_ergebnis_message_enthaelt_etf_anteil(self):
-        etf_df = pd.DataFrame({
-            "ETF": ["Test ETF"], "Name": ["Apple"], "Gewichtung (%)": [100.0]
-        })
-        depot_df = pd.DataFrame({
-            "Art": ["ETF"], "Position": ["Test ETF"], "Marktwert (%)": [40.0]
-        })
+        etf_df = pd.DataFrame({"ETF": ["Test ETF"], "Name": ["Apple"], "Gewichtung (%)": [100.0]})
+        depot_df = pd.DataFrame({"Art": ["ETF"], "Position": ["Test ETF"], "Marktwert (%)": [40.0]})
         _, msg = calculate_relative_weighting(etf_df, depot_df)
         assert "40" in msg
 
     def test_etf_nicht_in_csv_wird_uebersprungen(self):
         """ETF im Depot aber nicht in ETF-CSV → kein Fehler, nur WARNING."""
-        etf_df = pd.DataFrame({
-            "ETF": ["Anderer ETF"], "Name": ["Apple"], "Gewichtung (%)": [10.0]
-        })
-        depot_df = pd.DataFrame({
-            "Art": ["ETF"], "Position": ["Test ETF"], "Marktwert (%)": [50.0]
-        })
+        etf_df = pd.DataFrame({"ETF": ["Anderer ETF"], "Name": ["Apple"], "Gewichtung (%)": [10.0]})
+        depot_df = pd.DataFrame({"Art": ["ETF"], "Position": ["Test ETF"], "Marktwert (%)": [50.0]})
         # Soll nicht werfen
         result, msg = calculate_relative_weighting(etf_df, depot_df)
         assert result is not None
@@ -265,37 +268,38 @@ class TestCalculateRelativeWeighting:
 
     def test_etf_gewicht_null_ergibt_null_gewichtung(self):
         """ETF mit Marktwert 0% → alle Positionen bekommen relative Gewichtung 0."""
-        etf_df = pd.DataFrame({
-            "ETF": ["Test ETF"], "Name": ["Apple"], "Gewichtung (%)": [10.0]
-        })
-        depot_df = pd.DataFrame({
-            "Art": ["ETF"], "Position": ["Test ETF"], "Marktwert (%)": [0.0]
-        })
+        etf_df = pd.DataFrame({"ETF": ["Test ETF"], "Name": ["Apple"], "Gewichtung (%)": [10.0]})
+        depot_df = pd.DataFrame({"Art": ["ETF"], "Position": ["Test ETF"], "Marktwert (%)": [0.0]})
         result, _ = calculate_relative_weighting(etf_df, depot_df)
         assert result["relative Gewichtung (%)"].sum() == 0.0
 
     def test_mehrere_etfs_werden_unabhaengig_berechnet(self):
         """Zwei ETFs mit verschiedenen Depotgewichten werden korrekt getrennt berechnet."""
-        etf_df = pd.DataFrame({
-            "ETF":            ["ETF A", "ETF A", "ETF B"],
-            "Name":           ["Apple", "Microsoft", "Google"],
-            "Gewichtung (%)": [20.0, 10.0, 50.0],
-        })
-        depot_df = pd.DataFrame({
-            "Art":           ["ETF", "ETF"],
-            "Position":      ["ETF A", "ETF B"],
-            "Marktwert (%)": [40.0, 20.0],
-        })
+        etf_df = pd.DataFrame(
+            {
+                "ETF": ["ETF A", "ETF A", "ETF B"],
+                "Name": ["Apple", "Microsoft", "Google"],
+                "Gewichtung (%)": [20.0, 10.0, 50.0],
+            }
+        )
+        depot_df = pd.DataFrame(
+            {
+                "Art": ["ETF", "ETF"],
+                "Position": ["ETF A", "ETF B"],
+                "Marktwert (%)": [40.0, 20.0],
+            }
+        )
         result, _ = calculate_relative_weighting(etf_df, depot_df)
         apple_weight = result.loc[result["Name"] == "Apple", "relative Gewichtung (%)"].values[0]
         google_weight = result.loc[result["Name"] == "Google", "relative Gewichtung (%)"].values[0]
-        assert abs(apple_weight - 8.0) < 0.001    # 20% * 40% = 8%
+        assert abs(apple_weight - 8.0) < 0.001  # 20% * 40% = 8%
         assert abs(google_weight - 10.0) < 0.001  # 50% * 20% = 10%
 
 
 # ---------------------------------------------------------------------------
 # Tests: SECTOR_MAPPING & LOCATION_MAPPING Konsistenz
 # ---------------------------------------------------------------------------
+
 
 class TestMappingKonsistenz:
     def test_sector_mapping_hat_keine_leeren_werte(self):
@@ -317,4 +321,3 @@ class TestMappingKonsistenz:
     def test_keine_leerzeichen_in_mapping_werten(self):
         for _k, v in {**SECTOR_MAPPING, **LOCATION_MAPPING}.items():
             assert v == v.strip(), f"Führende/nachfolgende Leerzeichen in Mapping-Wert '{v}'"
-

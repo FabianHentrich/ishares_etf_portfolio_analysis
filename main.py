@@ -8,9 +8,15 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from scripts.data_download import download_csv_if_old, download_stock_price
-from scripts.data_processing import calculate_relative_weighting, clean_etf_data
+from scripts.data_processing import (
+    EXCL_LOCATIONS,
+    EXCL_SECTORS,
+    calculate_relative_weighting,
+    clean_etf_data,
+)
 from scripts.file_handling import export_to_excel, read_etf_data
 from scripts.plotting import (
+    _de,
     _eur,
     _pct,
     build_bar_chart,
@@ -26,9 +32,10 @@ from scripts.plotting import (
 # ---------------------------------------------------------------------------
 _LOG_FORMAT = "%(asctime)s  %(levelname)-8s  %(name)s – %(message)s"
 
+
 def _setup_logging():
     root = logging.getLogger()
-    if root.handlers:          # Guard: nicht mehrfach konfigurieren (z.B. bei Re-Import)
+    if root.handlers:  # Guard: nicht mehrfach konfigurieren (z.B. bei Re-Import)
         return
     root.setLevel(logging.DEBUG)
 
@@ -58,6 +65,7 @@ def _setup_logging():
     for name in ("yfinance", "peewee", "urllib3"):
         logging.getLogger(name).setLevel(logging.WARNING)
 
+
 _setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -80,31 +88,37 @@ def main():
     # ------------------------------------------------------------------
     load_dotenv()
 
-    DOWNLOAD_PATH = resolve_env_var(os.getenv('DOWNLOAD_PATH'))
-    SAVE_PATH     = resolve_env_var(os.getenv('SAVE_PATH'))
-    INPUT_FILE    = resolve_env_var(os.getenv('INPUT_FILE'))
-    OUTPUT_FILE   = resolve_env_var(os.getenv('OUTPUT_FILE'))
+    DOWNLOAD_PATH = resolve_env_var(os.getenv("DOWNLOAD_PATH"))
+    SAVE_PATH = resolve_env_var(os.getenv("SAVE_PATH"))
+    INPUT_FILE = resolve_env_var(os.getenv("INPUT_FILE"))
+    OUTPUT_FILE = resolve_env_var(os.getenv("OUTPUT_FILE"))
 
-    CSV_URL               = [u.strip() for u in os.getenv('CSV_URL', '').split(',')]
-    ETF_CSV_FILE          = [f.strip() for f in os.getenv('ETF_CSV_FILE', '').split(',')]
-    STOCK_TICKER_SUFFIXES  = [s.strip() for s in os.getenv('STOCK_TICKER_SUFFIXES', '').split(',')]
-    CRYPTO_TICKER_SUFFIXES = [s.strip() for s in os.getenv('CRYPTO_TICKER_SUFFIXES', '').split(',')]
+    CSV_URL = [u.strip() for u in os.getenv("CSV_URL", "").split(",")]
+    ETF_CSV_FILE = [f.strip() for f in os.getenv("ETF_CSV_FILE", "").split(",")]
+    STOCK_TICKER_SUFFIXES = [s.strip() for s in os.getenv("STOCK_TICKER_SUFFIXES", "").split(",")]
+    CRYPTO_TICKER_SUFFIXES = [s.strip() for s in os.getenv("CRYPTO_TICKER_SUFFIXES", "").split(",")]
 
     # Pflicht-Konfiguration validieren
-    _missing = [k for k, v in {
-        'DOWNLOAD_PATH': DOWNLOAD_PATH, 'SAVE_PATH': SAVE_PATH,
-        'INPUT_FILE': INPUT_FILE, 'OUTPUT_FILE': OUTPUT_FILE,
-    }.items() if not v]
+    _missing = [
+        k
+        for k, v in {
+            "DOWNLOAD_PATH": DOWNLOAD_PATH,
+            "SAVE_PATH": SAVE_PATH,
+            "INPUT_FILE": INPUT_FILE,
+            "OUTPUT_FILE": OUTPUT_FILE,
+        }.items()
+        if not v
+    ]
     if _missing:
         logger.error(f"Fehlende Pflicht-Umgebungsvariablen in .env: {_missing}. Abbruch.")
         sys.exit(1)
 
-    if not ETF_CSV_FILE or ETF_CSV_FILE == ['']:
+    if not ETF_CSV_FILE or ETF_CSV_FILE == [""]:
         logger.error("ETF_CSV_FILE ist leer – keine ETF-Dateien konfiguriert. Abbruch.")
         sys.exit(1)
 
     # Verzeichnisse prüfen
-    for label, path in [('DOWNLOAD_PATH', DOWNLOAD_PATH), ('SAVE_PATH', SAVE_PATH)]:
+    for label, path in [("DOWNLOAD_PATH", DOWNLOAD_PATH), ("SAVE_PATH", SAVE_PATH)]:
         if not os.path.isdir(path):
             logger.warning(f"{label} '{path}' existiert nicht – wird erstellt.")
             try:
@@ -132,10 +146,7 @@ def main():
     # ------------------------------------------------------------------
     # 2. ETF-Daten einlesen & bereinigen
     # ------------------------------------------------------------------
-    etf_data_list = [
-        df for f in ETF_CSV_FILE
-        if (df := read_etf_data(os.path.join(DOWNLOAD_PATH, f))) is not None
-    ]
+    etf_data_list = [df for f in ETF_CSV_FILE if (df := read_etf_data(os.path.join(DOWNLOAD_PATH, f))) is not None]
 
     if not etf_data_list:
         logger.error("Keine ETF-Daten verfügbar. Abbruch.")
@@ -154,8 +165,8 @@ def main():
     depot = pd.read_excel(INPUT_FILE)
     logger.info(f"Depot geladen: {depot.shape[0]} Positionen.")
 
-    _required_cols = {'Art', 'Position', 'Ticker', 'Anteile'}
-    _missing_cols  = _required_cols - set(depot.columns)
+    _required_cols = {"Art", "Position", "Ticker", "Anteile"}
+    _missing_cols = _required_cols - set(depot.columns)
     if _missing_cols:
         logger.error(f"Depot-Excel fehlt Pflicht-Spalten: {_missing_cols}. Abbruch.")
         sys.exit(1)
@@ -177,23 +188,20 @@ def main():
     depot["Ticker_orig_excel"] = depot["Ticker"]
 
     # Ticker-Suffix bereinigen für den Merge
-    depot["Ticker_clean"] = depot["Ticker"].str.replace(r'\..*$', '', regex=True)
-    depot.loc[depot['Art'] == 'Krypto', 'Ticker_clean'] = \
-        depot['Ticker'].str.replace(r'\-.*$', '', regex=True)
+    depot["Ticker_clean"] = depot["Ticker"].str.replace(r"\..*$", "", regex=True)
+    depot.loc[depot["Art"] == "Krypto", "Ticker_clean"] = depot["Ticker"].str.replace(r"\-.*$", "", regex=True)
 
-    stock_prices = stock_prices.drop_duplicates(subset='Ticker', keep='first')
+    stock_prices = stock_prices.drop_duplicates(subset="Ticker", keep="first")
     depot = depot.merge(
-        stock_prices[['Ticker', 'Kurs']],
-        left_on='Ticker_clean', right_on='Ticker',
-        how='left', suffixes=('_orig', '')
+        stock_prices[["Ticker", "Kurs"]], left_on="Ticker_clean", right_on="Ticker", how="left", suffixes=("_orig", "")
     )
     # Merge-Hilfsspalten entfernen, originalen Ticker wiederherstellen
-    depot.drop(columns=['Ticker_orig', 'Ticker_clean'], errors='ignore', inplace=True)
-    depot['Ticker'] = depot['Ticker_orig_excel']
-    depot.drop(columns=['Ticker_orig_excel'], inplace=True)
+    depot.drop(columns=["Ticker_orig", "Ticker_clean"], errors="ignore", inplace=True)
+    depot["Ticker"] = depot["Ticker_orig_excel"]
+    depot.drop(columns=["Ticker_orig_excel"], inplace=True)
 
-    depot["Kurs"]     = pd.to_numeric(depot["Kurs"],    errors='coerce')
-    depot["Anteile"]  = pd.to_numeric(depot["Anteile"], errors='coerce')
+    depot["Kurs"] = pd.to_numeric(depot["Kurs"], errors="coerce")
+    depot["Anteile"] = pd.to_numeric(depot["Anteile"], errors="coerce")
     depot["Marktwert"] = depot["Anteile"] * depot["Kurs"]
 
     missing_kurs = depot[depot["Kurs"].isna()]
@@ -204,11 +212,35 @@ def main():
         )
 
     gesamtwert_vollstaendig = missing_kurs.empty
-    depot["Marktwert (%)"] = depot["Marktwert"] / depot["Marktwert"].sum() * 100
+    total_marktwert = depot["Marktwert"].sum()
+    if total_marktwert <= 0:
+        logger.error("Gesamtwert des Depots ist 0 oder negativ – kein gültiger Kurs vorhanden. Abbruch.")
+        sys.exit(1)
+    depot["Marktwert (%)"] = depot["Marktwert"] / total_marktwert * 100
     logger.debug(f"Depot nach Kursberechnung:\n{depot.to_string()}")
-    n_missing = depot['Kurs'].isna().sum()
-    logger.info(f"Depot berechnet: {len(depot)} Positionen, Gesamtwert {depot['Marktwert'].sum():,.2f} €" +
-                (f", {n_missing} ohne Kurs" if n_missing else ""))
+    n_missing = depot["Kurs"].isna().sum()
+    logger.info(
+        f"Depot berechnet: {len(depot)} Positionen, Gesamtwert {total_marktwert:,.2f} €"
+        + (f", {n_missing} ohne Kurs" if n_missing else "")
+    )
+
+    # Warnung wenn Einzelaktien ohne Sektor oder Standort im Depot sind –
+    # sie erscheinen nicht korrekt in Sektor- und Länderkarten
+    _aktien_ohne_meta = depot[
+        (depot["Art"] == "Aktie")
+        & (
+            depot["Sektor"].isna()
+            | depot["Sektor"].isin(["-", ""])
+            | depot["Standort"].isna()
+            | depot["Standort"].isin(["-", ""])
+        )
+    ]
+    if not _aktien_ohne_meta.empty:
+        logger.warning(
+            f"{len(_aktien_ohne_meta)} Einzelaktie(n) ohne Sektor/Standort – "
+            f"erscheinen nicht vollständig in Sektor- und Länderkarten:\n"
+            + _aktien_ohne_meta[["Ticker", "Position"]].to_string(index=False)
+        )
 
     # ------------------------------------------------------------------
     # 5. Relative Gewichtung berechnen
@@ -224,85 +256,91 @@ def main():
     # 6. Assets zusammenführen
     # ------------------------------------------------------------------
     assets = (
-        depot[depot["Art"].isin(["Aktie", "Krypto"])]
-        [["Ticker", "Art", "Position", "Sektor", "Standort", "Marktwert (%)"]]
-        .rename(columns={
-            "Ticker":       "Emittententicker",
-            "Position":     "Name",
-            "Art":          "ETF",
-            "Marktwert (%)": "relative Gewichtung (%)",
-        })
+        depot[depot["Art"].isin(["Aktie", "Krypto"])][
+            ["Ticker", "Art", "Position", "Sektor", "Standort", "Marktwert (%)"]
+        ]
+        .rename(
+            columns={
+                "Ticker": "Emittententicker",
+                "Position": "Name",
+                "Art": "ETF",
+                "Marktwert (%)": "relative Gewichtung (%)",
+            }
+        )
         .copy()
     )
     depot_data = pd.concat([etf_data, assets], ignore_index=True, sort=False)
 
     # Chart-DataFrame: nur Zeilen mit echtem Sektor (kein '-', 'nan', Cash-Derivate)
     # 'Sonstige' bleibt drin – unbekannte Sektoren/Länder werden dort gebündelt
-    _EXCL_SECTORS   = {'-', 'nan', 'Cash und/oder Derivate', 'Cash and/or Derivatives'}
-    _EXCL_LOCATIONS = {'-', 'nan', 'Krypto', 'Cash', 'Cash (Euro)'}
     depot_data_chart = depot_data[
-        depot_data['Sektor'].notna() &
-        (~depot_data['Sektor'].astype(str).isin(_EXCL_SECTORS))
+        depot_data["Sektor"].notna() & (~depot_data["Sektor"].astype(str).isin(EXCL_SECTORS))
     ].copy()
 
     # Krypto & Cash: nur ergänzen wenn sie NICHT bereits über assets in depot_data_chart sind
     # (Krypto hat Sektor='Krypto' → übersteht den Sektor-Filter bereits, wäre sonst doppelt)
-    bereits_enthalten = set(depot_data_chart['Name'].dropna().unique())
+    bereits_enthalten = set(depot_data_chart["Name"].dropna().unique())
     extra_rows = []
-    for art in ['Krypto', 'Cash']:
-        positionen = depot[depot['Art'] == art]
+    for art in ["Krypto", "Cash"]:
+        positionen = depot[depot["Art"] == art]
         for _, row in positionen.iterrows():
-            if (pd.notna(row.get('Marktwert (%)'))
-                    and row['Marktwert (%)'] > 0
-                    and row['Position'] not in bereits_enthalten):
-                extra_rows.append({
-                    'Name':                    row['Position'],
-                    'ETF':                     art,
-                    'Sektor':                  art,
-                    'Standort':                art,
-                    'Emittententicker':        row.get('Ticker', ''),
-                    'relative Gewichtung (%)': row['Marktwert (%)'],
-                })
+            if (
+                pd.notna(row.get("Marktwert (%)"))
+                and row["Marktwert (%)"] > 0
+                and row["Position"] not in bereits_enthalten
+            ):
+                extra_rows.append(
+                    {
+                        "Name": row["Position"],
+                        "ETF": art,
+                        "Sektor": art,
+                        "Standort": art,
+                        "Emittententicker": row.get("Ticker", ""),
+                        "relative Gewichtung (%)": row["Marktwert (%)"],
+                    }
+                )
     if extra_rows:
-        depot_data_chart = pd.concat(
-            [depot_data_chart, pd.DataFrame(extra_rows)],
-            ignore_index=True, sort=False
-        )
+        depot_data_chart = pd.concat([depot_data_chart, pd.DataFrame(extra_rows)], ignore_index=True, sort=False)
 
     # ------------------------------------------------------------------
     # 7. Auswertungen erstellen
     # ------------------------------------------------------------------
     def _agg(df, group_col, value_col, out_col):
-        return (df.groupby(group_col)[value_col].sum().reset_index()
-                .rename(columns={value_col: out_col})
-                .sort_values(out_col, ascending=False))
+        return (
+            df.groupby(group_col)[value_col]
+            .sum()
+            .reset_index()
+            .rename(columns={value_col: out_col})
+            .sort_values(out_col, ascending=False)
+        )
 
-    depot_data_sectors   = _agg(depot_data_chart, 'Sektor',   'relative Gewichtung (%)', 'Sektorgewichtung (%)')
+    depot_data_sectors = _agg(depot_data_chart, "Sektor", "relative Gewichtung (%)", "Sektorgewichtung (%)")
 
     # depot_data_etfs: Cash explizit ergänzen – Cash ist weder in etf_data noch in assets
-    depot_data_etfs = _agg(depot_data, 'ETF', 'relative Gewichtung (%)', 'ETF-Gewichtung (%)')
-    cash_pct = depot.loc[depot['Art'] == 'Cash', 'Marktwert (%)'].sum()
+    depot_data_etfs = _agg(depot_data, "ETF", "relative Gewichtung (%)", "ETF-Gewichtung (%)")
+    cash_pct = depot.loc[depot["Art"] == "Cash", "Marktwert (%)"].sum()
     if cash_pct > 0:
-        cash_row = pd.DataFrame([{'ETF': 'Cash', 'ETF-Gewichtung (%)': cash_pct}])
+        cash_row = pd.DataFrame([{"ETF": "Cash", "ETF-Gewichtung (%)": cash_pct}])
         depot_data_etfs = pd.concat([depot_data_etfs, cash_row], ignore_index=True).sort_values(
-            'ETF-Gewichtung (%)', ascending=False
+            "ETF-Gewichtung (%)", ascending=False
         )
 
     loc_df = depot_data_chart[
-        depot_data_chart['Standort'].notna() &
-        (~depot_data_chart['Standort'].astype(str).isin(_EXCL_LOCATIONS))
+        depot_data_chart["Standort"].notna() & (~depot_data_chart["Standort"].astype(str).isin(EXCL_LOCATIONS))
     ]
-    depot_data_locations = _agg(loc_df, 'Standort', 'relative Gewichtung (%)', 'Ländergewichtung (%)')
+    depot_data_locations = _agg(loc_df, "Standort", "relative Gewichtung (%)", "Ländergewichtung (%)")
 
     depot_data_stocks = (
-        depot_data_chart.groupby('Name').agg(
-            Emittententicker=('Emittententicker', 'first'),
-            Gesamtgewichtung=('relative Gewichtung (%)', 'sum'),
-            Sektor=('Sektor', 'first'),
-            Standort=('Standort', 'first'),
-        ).reset_index()
-        .rename(columns={'Gesamtgewichtung': 'Gesamtgewichtung (%)'})
-        .sort_values('Gesamtgewichtung (%)', ascending=False)
+        depot_data_chart.groupby("Name")
+        .agg(
+            Emittententicker=("Emittententicker", "first"),
+            Gesamtgewichtung=("relative Gewichtung (%)", "sum"),
+            Sektor=("Sektor", "first"),
+            Standort=("Standort", "first"),
+        )
+        .reset_index()
+        .rename(columns={"Gesamtgewichtung": "Gesamtgewichtung (%)"})
+        .sort_values("Gesamtgewichtung (%)", ascending=False)
     )
     # Hinweis: Cash ist bereits über extra_rows in depot_data_chart und
     # damit automatisch im groupby-Ergebnis enthalten – kein separater Append nötig
@@ -310,8 +348,9 @@ def main():
     # ------------------------------------------------------------------
     # 8. Excel-Export
     # ------------------------------------------------------------------
-    export_to_excel(OUTPUT_FILE, depot, depot_data, depot_data_stocks,
-                    depot_data_etfs, depot_data_sectors, depot_data_locations)
+    export_to_excel(
+        OUTPUT_FILE, depot, depot_data, depot_data_stocks, depot_data_etfs, depot_data_sectors, depot_data_locations
+    )
 
     # ------------------------------------------------------------------
     # 9. HTML-Report erstellen
@@ -319,40 +358,51 @@ def main():
     gesamtwert = depot["Marktwert"].sum()
     gesamtwert_label = _eur(gesamtwert) if gesamtwert_vollstaendig else f"{_eur(gesamtwert)} ⚠️ (unvollständig)"
 
-    # HHI-Diversifikations-Score: Basis = depot_data_stocks (ETF-Durchblick)
-    # → jede Einzelposition mit ihrem echten anteiligen Gewicht, nicht ETFs als Blackbox
-    # Normalisierung auf 100 nötig da ETF-Durchblick die Summe > 100% macht
-    # TODO: HHI-Berechnung überprüfen – aktuell auf depot_data_stocks (ETF-Durchblick,
-    #       normalisiert auf 100%). Ergibt trotzdem ~3 statt erwartetem ~0.1-0.5.
-    #       Mögliche Ursachen:
-    #       1. depot_data_stocks enthält noch Duplikate (gleiche Position aus mehreren ETFs)
-    #       2. Normalisierung fehlerhaft weil Summe der Gewichtungen weit von 100 abweicht
-    #       3. Schwellenwerte müssen nochmals kalibriert werden
-    #       Debugging: weights.describe() und weights.nlargest(10) loggen um Ausreißer zu finden
-    weights   = depot_data_stocks['Gesamtgewichtung (%)'].dropna()
-    weights   = weights[weights > 0]
-    weights_n = weights / weights.sum() * 100   # auf 100% normalisieren
-    hhi_score = (weights_n ** 2).sum() / 100
+    # HHI-Diversifikations-Score
+    # Basis: depot_data_stocks – ETF-Durchblick, jede Einzelposition mit anteiligem Gewicht.
+    # Formel (FTC/DoJ Merger Guidelines 2023): HHI = Σ s_i²  (s_i = Marktanteil in %)
+    #   Skala 0–10.000: < 1.000 → nicht konzentriert
+    #                   1.000–1.800 → mäßig konzentriert
+    #                   > 1.800 → hoch konzentriert
+    # Für Anzeige auf 0–100 skaliert (÷ 100), Schwellenwerte entsprechend: 10 / 18
+    weights = depot_data_stocks["Gesamtgewichtung (%)"].dropna()
+    weights = weights[weights > 0]
+    weights_pct = weights / weights.sum() * 100  # s_i in %, Summe = 100
+    hhi_raw = (weights_pct**2).sum()  # Standard-HHI: 0–10.000
+    hhi_score = hhi_raw / 100  # Skaliert auf 0–100
+    logger.debug(
+        f"HHI-Berechnung: {len(weights_pct)} Positionen, "
+        f"Top-5 Gewichte: {weights_pct.nlargest(5).round(2).to_dict()}, "
+        f"HHI (0-100) = {hhi_score:.1f}"
+    )
     n_positionen = len(depot_data_stocks)
-    n_sektoren   = depot_data_chart['Sektor'].nunique()
-    n_laender    = depot_data_chart[
-        depot_data_chart['Standort'].notna() &
-        (~depot_data_chart['Standort'].astype(str).isin(_EXCL_LOCATIONS))
-    ]['Standort'].nunique()
-    if hhi_score < 0.10:
-        hhi_stufe = "Sehr gut diversifiziert"
-    elif hhi_score < 0.50:
-        hhi_stufe = "Gut diversifiziert"
-    elif hhi_score < 1.50:
-        hhi_stufe = "Mäßig diversifiziert"
+    n_sektoren = depot_data_chart["Sektor"].nunique()
+    n_laender = depot_data_chart[
+        depot_data_chart["Standort"].notna() & (~depot_data_chart["Standort"].astype(str).isin(EXCL_LOCATIONS))
+    ]["Standort"].nunique()
+    if hhi_score < 10:
+        hhi_stufe = "Nicht konzentriert"
+    elif hhi_score < 18:
+        hhi_stufe = "Mäßig konzentriert"
     else:
-        hhi_stufe = "Konzentriert"
+        hhi_stufe = "Hoch konzentriert"
     hhi_label = (
         f"{hhi_stufe}<br>"
-        f"<small>HHI {hhi_score:.2f} · "
+        f"<small>HHI {hhi_score:.1f} / 100 · "
         f"{n_positionen} Positionen · "
         f"{n_sektoren} Sektoren · "
         f"{n_laender} Länder</small>"
+    )
+
+    # Top-5-Konzentrationsrisiko (ETF-Durchblick)
+    # Anteil der 5 größten Einzelpositionen am Gesamtdepot
+    top5_series = weights_pct.nlargest(5)
+    top5_pct = top5_series.sum()  # bereits in % (normalisiert auf 100)
+    top5_names = depot_data_stocks["Name"].iloc[:5].tolist()
+    top5_warning = top5_pct > 40
+    top5_label = (
+        f"{_de(top5_pct, 1, '%')}{'  ⚠️' if top5_warning else ''}<br>"
+        f"<small>{' · '.join(top5_names[:3])}{'  …' if len(top5_names) > 3 else ''}</small>"
     )
 
     # Anzahl je Assetklasse für Positionen-Card
@@ -361,96 +411,109 @@ def main():
     # KPI-Cards – gruppiert: Depot | Assetklassen | Qualität
     depot_summary = {
         # --- Depot-Übersicht ---
-        "Gesamtwert":       gesamtwert_label,
-        "Positionen":       " / ".join(f"{art_counts.get(a, 0)} {a}s" for a in ["ETF", "Aktie", "Krypto"]) + f" + {art_counts.get('Cash', 0)} Cash",
+        "Gesamtwert": gesamtwert_label,
+        "Positionen": " / ".join(f"{art_counts.get(a, 0)} {a}s" for a in ["ETF", "Aktie", "Krypto"])
+        + f" + {art_counts.get('Cash', 0)} Cash",
         # --- Assetklassen-Anteile ---
-        "ETF-Anteil":       _pct(depot.loc[depot['Art'] == 'ETF',    'Marktwert (%)'].sum()),
-        "Aktien-Anteil":    _pct(depot.loc[depot['Art'] == 'Aktie',  'Marktwert (%)'].sum()),
-        "Krypto-Anteil":    _pct(depot.loc[depot['Art'] == 'Krypto', 'Marktwert (%)'].sum()),
-        "Cash-Anteil":      _pct(depot.loc[depot['Art'] == 'Cash',   'Marktwert (%)'].sum()),
+        "ETF-Anteil": _pct(depot.loc[depot["Art"] == "ETF", "Marktwert (%)"].sum()),
+        "Aktien-Anteil": _pct(depot.loc[depot["Art"] == "Aktie", "Marktwert (%)"].sum()),
+        "Krypto-Anteil": _pct(depot.loc[depot["Art"] == "Krypto", "Marktwert (%)"].sum()),
+        "Cash-Anteil": _pct(depot.loc[depot["Art"] == "Cash", "Marktwert (%)"].sum()),
         # --- Qualität ---
-        "Diversifikation":  hhi_label,
+        "Diversifikation": hhi_label,
+        "Top-5-Konzentration": top5_label,
     }
     if fallback_used:
-        depot_summary["⚠️ Fallback-Kurse"] = (
-            f"{', '.join(fallback_used)} – kein Live-Kurs, historischen Wert verwendet"
-        )
+        depot_summary["⚠️ Fallback-Kurse"] = f"{', '.join(fallback_used)} – kein Live-Kurs, historischen Wert verwendet"
 
     # Sektor-Heatmap: Gewichtung je Sektor × ETF/Quelle
     # Spalten = ETF-Name oder 'Aktie'/'Krypto', Zeilen = Sektor
     heatmap_df = depot_data_chart.copy()
-    heatmap_df['Quelle'] = heatmap_df['ETF']
+    heatmap_df["Quelle"] = heatmap_df["ETF"]
     sector_pivot = (
-        heatmap_df.groupby(['Sektor', 'Quelle'])['relative Gewichtung (%)']
-        .sum()
-        .unstack(fill_value=0)
-        .round(2)
+        heatmap_df.groupby(["Sektor", "Quelle"])["relative Gewichtung (%)"].sum().unstack(fill_value=0).round(2)
     )
     # Sektoren absteigend nach Gesamtgewichtung sortieren
     sector_pivot = sector_pivot.loc[sector_pivot.sum(axis=1).sort_values(ascending=False).index]
 
     # Treemap Anlageart → Position (Depot-Ebene, kein ETF-Durchblick)
-    treemap_art_df = depot[depot['Marktwert (%)'] > 0][['Art', 'Position', 'Marktwert (%)']].copy()
+    treemap_art_df = depot[depot["Marktwert (%)"] > 0][["Art", "Position", "Marktwert (%)"]].copy()
 
     # Warnung wenn Positionen ohne Marktwert im Depot sind – sie erscheinen nicht im Pie-Chart
-    _no_value = depot[depot['Marktwert (%)'].isna() | (depot['Marktwert (%)'] <= 0)]
+    _no_value = depot[depot["Marktwert (%)"].isna() | (depot["Marktwert (%)"] <= 0)]
     if not _no_value.empty:
         logger.warning(
             f"{len(_no_value)} Position(en) ohne Marktwert – nicht im Übersichts-Chart:\n"
-            + _no_value[['Ticker', 'Position', 'Art']].to_string(index=False)
+            + _no_value[["Ticker", "Position", "Art"]].to_string(index=False)
         )
 
     report_sections = [
-        {"title": "Depotübersicht",
-         "html": build_depot_table(depot),
-         "description": "Alle Positionen mit aktuellem Kurs, Marktwert und Depotanteil."},
-        {"title": "Übersicht nach Depot",
-         "fig": build_pie_chart(depot, 'Marktwert (%)', 'Position', 'Übersicht nach Depot'),
-         "description": "Marktwertsanteil jeder Depotposition."},
-        {"title": "Kapitalverteilung: Anlageart → Position",
-         "fig": build_treemap(treemap_art_df, ['Art', 'Position'], 'Marktwert (%)',
-                              'Kapitalverteilung: Anlageart → Position'),
-         "description": "Kapitalverteilung auf Depot-Ebene nach Anlageart und Position – ersetzt den einfachen Anlageart-Pie."},
-        {"title": "Top 20 Positionen – Balken",
-         "fig": build_bar_chart(depot_data_stocks, 'Gesamtgewichtung (%)', 'Name', 'Top 20 Positionen', top_n=20),
-         "description": "Die 20 größten Einzelpositionen nach Gesamtgewichtung (inkl. ETF-Durchblick)."},
-
-        {"title": "Länder – Treemap",
-         "fig": build_treemap(
-             depot_data_chart[
-                 depot_data_chart['Standort'].notna() &
-                 (~depot_data_chart['Standort'].astype(str).isin(_EXCL_LOCATIONS)) &
-                 (depot_data_chart['relative Gewichtung (%)'] > 0)
-             ]
-             .dropna(subset=['Standort', 'Name'])
-             .groupby(['Standort', 'Name'], as_index=False)['relative Gewichtung (%)']
-             .sum(),
-             ['Standort', 'Name'], 'relative Gewichtung (%)', 'Ländergewichtung'),
-         "description": "Geografische Gewichtung inkl. ETF-Durchblick – Fläche entspricht der Gewichtung, Unterebene zeigt Einzelpositionen."},
-        {"title": "Sektor-Heatmap: ETF-Überschneidungen",
-         "fig": build_heatmap(sector_pivot,
-                              'Sektorgewichtung (%) je ETF / Assetklasse',
-                              colorscale='Blues'),
-         "description": (
-             "Zeigt wie stark jeder Sektor in jedem ETF / jeder Assetklasse gewichtet ist (in %). "
-             "Überschneidungen zeigen Klumpenrisiken."
-         )},
+        {
+            "title": "Depotübersicht",
+            "html": build_depot_table(depot),
+            "description": "Alle Positionen mit aktuellem Kurs, Marktwert und Depotanteil.",
+        },
+        {
+            "title": "Übersicht nach Depot",
+            "fig": build_pie_chart(depot, "Marktwert (%)", "Position", "Übersicht nach Depot"),
+            "description": "Marktwertsanteil jeder Depotposition.",
+        },
+        {
+            "title": "Kapitalverteilung: Anlageart → Position",
+            "fig": build_treemap(
+                treemap_art_df, ["Art", "Position"], "Marktwert (%)", "Kapitalverteilung: Anlageart → Position"
+            ),
+            "description": "Kapitalverteilung auf Depot-Ebene nach Anlageart und Position – ersetzt den einfachen Anlageart-Pie.",
+        },
+        {
+            "title": "Top 20 Positionen – Balken",
+            "fig": build_bar_chart(depot_data_stocks, "Gesamtgewichtung (%)", "Name", "Top 20 Positionen", top_n=20),
+            "description": "Die 20 größten Einzelpositionen nach Gesamtgewichtung (inkl. ETF-Durchblick).",
+        },
+        {
+            "title": "Länder – Treemap",
+            "fig": build_treemap(
+                depot_data_chart[
+                    depot_data_chart["Standort"].notna()
+                    & (~depot_data_chart["Standort"].astype(str).isin(EXCL_LOCATIONS))
+                    & (depot_data_chart["relative Gewichtung (%)"] > 0)
+                ]
+                .dropna(subset=["Standort", "Name"])
+                .groupby(["Standort", "Name"], as_index=False)["relative Gewichtung (%)"]
+                .sum(),
+                ["Standort", "Name"],
+                "relative Gewichtung (%)",
+                "Ländergewichtung",
+            ),
+            "description": "Geografische Gewichtung inkl. ETF-Durchblick – Fläche entspricht der Gewichtung, Unterebene zeigt Einzelpositionen.",
+        },
+        {
+            "title": "Sektor-Heatmap: ETF-Überschneidungen",
+            "fig": build_heatmap(sector_pivot, "Sektorgewichtung (%) je ETF / Assetklasse", colorscale="Blues"),
+            "description": (
+                "Zeigt wie stark jeder Sektor in jedem ETF / jeder Assetklasse gewichtet ist (in %). "
+                "Überschneidungen zeigen Klumpenrisiken."
+            ),
+        },
     ]
 
-    if {'Sektor', 'Name', 'relative Gewichtung (%)'}.issubset(depot_data_chart.columns):
+    if {"Sektor", "Name", "relative Gewichtung (%)"}.issubset(depot_data_chart.columns):
         # Auf Name-Ebene aggregieren → identische Gewichtungen wie Top-20-Balken
         treemap_data = (
-            depot_data_chart[depot_data_chart['relative Gewichtung (%)'] > 0]
-            .dropna(subset=['Sektor', 'Name'])
-            .groupby(['Sektor', 'Name'], as_index=False)['relative Gewichtung (%)']
+            depot_data_chart[depot_data_chart["relative Gewichtung (%)"] > 0]
+            .dropna(subset=["Sektor", "Name"])
+            .groupby(["Sektor", "Name"], as_index=False)["relative Gewichtung (%)"]
             .sum()
         )
-        report_sections.append({
-            "title": "Treemap: Sektor → Position",
-            "fig": build_treemap(treemap_data, ['Sektor', 'Name'], 'relative Gewichtung (%)',
-                                 'Treemap: Sektor → Position'),
-            "description": "Hierarchische Ansicht aller Positionen inkl. ETF-Durchblick – Fläche entspricht der Gewichtung.",
-        })
+        report_sections.append(
+            {
+                "title": "Treemap: Sektor → Position",
+                "fig": build_treemap(
+                    treemap_data, ["Sektor", "Name"], "relative Gewichtung (%)", "Treemap: Sektor → Position"
+                ),
+                "description": "Hierarchische Ansicht aller Positionen inkl. ETF-Durchblick – Fläche entspricht der Gewichtung.",
+            }
+        )
 
     report_file = os.path.join(SAVE_PATH, "portfolio_report.html")
     export_html_report(report_sections, report_file, depot_summary=depot_summary)

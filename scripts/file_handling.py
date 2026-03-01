@@ -8,7 +8,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-def read_etf_data(file, skip_rows=2, encoding='utf-8', delimiter=','):
+def read_etf_data(file, skip_rows=2, encoding="utf-8", delimiter=","):
     """
     Read iShares ETF data from a CSV file.
     :param file: file path to the CSV file
@@ -31,8 +31,9 @@ def read_etf_data(file, skip_rows=2, encoding='utf-8', delimiter=','):
         return None
 
 
-def export_to_excel(output_file, depot, depot_data, depot_data_stocks, depot_data_etfs, depot_data_sectors,
-                    depot_data_locations):
+def export_to_excel(
+    output_file, depot, depot_data, depot_data_stocks, depot_data_etfs, depot_data_sectors, depot_data_locations
+):
     """
     Export the depot data to an Excel file in different sheets.
     :param output_file: file path to save the Excel file.

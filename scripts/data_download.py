@@ -68,7 +68,14 @@ def download_csv_if_old(urls, folder_path, filenames, max_age_days=30):
     if not os.path.isdir(folder_path):
         logger.error(f"Download-Verzeichnis '{folder_path}' existiert nicht – CSV-Download übersprungen.")
         return
-    for url, filename in zip(urls, filenames, strict=True):
+    if len(urls) != len(filenames):
+        logger.error(
+            f"CSV_URL ({len(urls)} Einträge) und ETF_CSV_FILE ({len(filenames)} Einträge) "
+            f"haben unterschiedlich viele Einträge – CSV-Download übersprungen. "
+            f"Bitte .env prüfen: Reihenfolge und Anzahl müssen übereinstimmen."
+        )
+        return
+    for url, filename in zip(urls, filenames, strict=False):  # Längenprüfung erfolgt explizit oben
         csv_file_path = os.path.join(folder_path, filename)
         if os.path.exists(csv_file_path):
             modification_time = os.path.getmtime(csv_file_path)
@@ -79,7 +86,7 @@ def download_csv_if_old(urls, folder_path, filenames, max_age_days=30):
         try:
             response = session.get(url, timeout=30)
             response.raise_for_status()
-            with open(csv_file_path, 'w', encoding='utf-8') as f:
+            with open(csv_file_path, "w", encoding="utf-8") as f:
                 f.write(response.text)
             logger.info(f"CSV-Datei '{filename}' erfolgreich heruntergeladen.")
         except Exception as e:
@@ -107,8 +114,8 @@ def download_stock_price(df, stock_ticker_suffixes=None, crypto_ticker_suffixes=
     logger.info(f"Letzter Handelstag: {last_working_day.date()}")
 
     # Process stock and ETF tickers – strip any existing suffix first
-    stock_tickers = df[df["Art"].isin(['Aktie', 'ETF'])]["Ticker"].str.replace(r'\..*$', '', regex=True).tolist()
-    crypto_tickers = df[df["Art"] == "Krypto"]["Ticker"].str.replace(r'\-.*$', '', regex=True).tolist()
+    stock_tickers = df[df["Art"].isin(["Aktie", "ETF"])]["Ticker"].str.replace(r"\..*$", "", regex=True).tolist()
+    crypto_tickers = df[df["Art"] == "Krypto"]["Ticker"].str.replace(r"\-.*$", "", regex=True).tolist()
     logger.debug(f"Aktien/ETF-Ticker: {stock_tickers}")
     logger.debug(f"Krypto-Ticker: {crypto_tickers}")
 
@@ -119,7 +126,7 @@ def download_stock_price(df, stock_ticker_suffixes=None, crypto_ticker_suffixes=
         # Batch-Download: alle Suffix-Kombinationen auf einmal versuchen
         for suffix in suffixes:
             # Nur Ticker herunterladen, für die noch kein Kurs vorliegt
-            already_found = {entry['Ticker'] for entry in price_list}
+            already_found = {entry["Ticker"] for entry in price_list}
             remaining = [t for t in tickers if t not in already_found]
             if not remaining:
                 break
@@ -127,8 +134,7 @@ def download_stock_price(df, stock_ticker_suffixes=None, crypto_ticker_suffixes=
             logger.debug(f"Batch-Download für {asset_type} mit Suffix '{suffix}': {modified_tickers}")
             try:
                 batch = yf.download(
-                    modified_tickers, start=last_working_day, end=today,
-                    progress=False, auto_adjust=True
+                    modified_tickers, start=last_working_day, end=today, progress=False, auto_adjust=True
                 )
                 if batch.empty:
                     continue
@@ -142,13 +148,13 @@ def download_stock_price(df, stock_ticker_suffixes=None, crypto_ticker_suffixes=
                     if mod_ticker in close.columns:
                         val = close[mod_ticker].dropna()
                         if not val.empty:
-                            price_list.append({'Ticker': orig_ticker, 'Kurs': float(val.iloc[-1])})
+                            price_list.append({"Ticker": orig_ticker, "Kurs": float(val.iloc[-1])})
                             logger.debug(f"Kurs gefunden: {orig_ticker} = {float(val.iloc[-1]):.4f} (via {mod_ticker})")
             except Exception as e:
                 logger.warning(f"Batch-Download fehlgeschlagen ({suffix}): {e}")
 
         # Für Ticker, für die noch kein Kurs gefunden wurde → Einzel-Fallback
-        found = {entry['Ticker'] for entry in price_list}
+        found = {entry["Ticker"] for entry in price_list}
         missing = [t for t in tickers if t not in found]
         for ticker in missing:
             price_found = False
@@ -156,13 +162,14 @@ def download_stock_price(df, stock_ticker_suffixes=None, crypto_ticker_suffixes=
                 modified_ticker = ticker + suffix
                 logger.debug(f"Einzel-Fallback: {modified_ticker}")
                 try:
-                    data = yf.download(modified_ticker, start=last_working_day, end=today,
-                                       progress=False, auto_adjust=True)
-                    if not data.empty and 'Close' in data.columns:
-                        val = data['Close'].dropna()
+                    data = yf.download(
+                        modified_ticker, start=last_working_day, end=today, progress=False, auto_adjust=True
+                    )
+                    if not data.empty and "Close" in data.columns:
+                        val = data["Close"].dropna()
                         if not val.empty:
-                            kurs = float(val.iloc[-1].item()) if hasattr(val.iloc[-1], 'item') else float(val.iloc[-1])
-                            price_list.append({'Ticker': ticker, 'Kurs': kurs})
+                            kurs = float(val.iloc[-1].item()) if hasattr(val.iloc[-1], "item") else float(val.iloc[-1])
+                            price_list.append({"Ticker": ticker, "Kurs": kurs})
                             logger.info(f"Kurs gefunden (Fallback): {ticker} = {kurs:.4f}")
                             price_found = True
                             break
@@ -170,7 +177,7 @@ def download_stock_price(df, stock_ticker_suffixes=None, crypto_ticker_suffixes=
                     logger.warning(f"Fehler beim Download von '{modified_ticker}': {e}")
             if not price_found:
                 logger.warning(f"Kein Kurs gefunden für '{ticker}' – wird als NaN gesetzt.")
-                price_list.append({'Ticker': ticker, 'Kurs': None})  # None statt [None]
+                price_list.append({"Ticker": ticker, "Kurs": None})  # None statt [None]
 
     if stock_tickers:
         _fetch_prices(stock_tickers, stock_ticker_suffixes, "Aktie/ETF")
@@ -183,11 +190,11 @@ def download_stock_price(df, stock_ticker_suffixes=None, crypto_ticker_suffixes=
     # ------------------------------------------------------------------
     fallback = _load_fallback()
     fallback_updated = False
-    fallback_used = []   # Ticker, für die der Fallback-Kurs eingesetzt wurde
+    fallback_used = []  # Ticker, für die der Fallback-Kurs eingesetzt wurde
 
     for entry in price_list:
-        ticker = entry['Ticker']
-        kurs = entry['Kurs']
+        ticker = entry["Ticker"]
+        kurs = entry["Kurs"]
         if kurs is not None:
             # Aktuellen Kurs in den Fallback schreiben
             if fallback.get(ticker) != kurs:
@@ -196,7 +203,7 @@ def download_stock_price(df, stock_ticker_suffixes=None, crypto_ticker_suffixes=
         else:
             # Kurs fehlt → Fallback verwenden falls vorhanden
             if ticker in fallback:
-                entry['Kurs'] = fallback[ticker]
+                entry["Kurs"] = fallback[ticker]
                 fallback_used.append(ticker)
                 logger.warning(
                     f"Kein Live-Kurs für '{ticker}' – Fallback-Kurs aus JSON verwendet: "
@@ -210,11 +217,11 @@ def download_stock_price(df, stock_ticker_suffixes=None, crypto_ticker_suffixes=
         logger.info(f"Fallback-JSON aktualisiert: {_FALLBACK_JSON}")
 
     # Cash-Eintrag
-    cash = pd.DataFrame({'Ticker': ['-'], 'Kurs': [1.0]})
+    cash = pd.DataFrame({"Ticker": ["-"], "Kurs": [1.0]})
     prices = pd.DataFrame(price_list)
     prices = pd.concat([prices, cash], ignore_index=True)
     logger.debug(f"Preisliste:\n{prices.to_string()}")
     # Kompakte INFO-Zusammenfassung
-    found_count = prices['Kurs'].notna().sum()
+    found_count = prices["Kurs"].notna().sum()
     logger.info(f"Kurse geladen: {found_count}/{len(prices)} Positionen. Fallbacks: {fallback_used or 'keine'}")
     return prices, fallback_used

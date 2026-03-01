@@ -22,6 +22,7 @@ from scripts.data_download import _load_fallback, _save_fallback, download_csv_i
 # Tests: _load_fallback / _save_fallback
 # ---------------------------------------------------------------------------
 
+
 class TestFallbackJson:
     def test_erstellt_neue_datei_wenn_nicht_vorhanden(self, tmp_path):
         json_path = str(tmp_path / "fallback.json")
@@ -74,6 +75,7 @@ class TestFallbackJson:
 # Tests: download_csv_if_old
 # ---------------------------------------------------------------------------
 
+
 class TestDownloadCsvIfOld:
     def test_ueberspringt_aktuelle_datei(self, tmp_path):
         """Datei jünger als max_age_days → kein Download."""
@@ -106,11 +108,7 @@ class TestDownloadCsvIfOld:
     def test_bricht_ab_bei_fehlendem_verzeichnis(self, tmp_path, caplog):
         """Nicht vorhandenes Verzeichnis → früher Abbruch mit ERROR-Log."""
         with caplog.at_level(logging.ERROR, logger="scripts.data_download"):
-            download_csv_if_old(
-                ["http://example.com/test.csv"],
-                str(tmp_path / "existiert_nicht"),
-                ["test.csv"]
-            )
+            download_csv_if_old(["http://example.com/test.csv"], str(tmp_path / "existiert_nicht"), ["test.csv"])
         assert any("existiert nicht" in r.message for r in caplog.records)
 
     def test_laedt_neue_datei_ohne_vorhandene(self, tmp_path):
@@ -135,11 +133,7 @@ class TestDownloadCsvIfOld:
         mock_session.get.return_value = mock_response
 
         with patch("scripts.data_download._create_retry_session", return_value=mock_session):
-            download_csv_if_old(
-                ["http://a.com/1.csv", "http://b.com/2.csv"],
-                str(tmp_path),
-                ["etf1.csv", "etf2.csv"]
-            )
+            download_csv_if_old(["http://a.com/1.csv", "http://b.com/2.csv"], str(tmp_path), ["etf1.csv", "etf2.csv"])
 
         assert mock_session.get.call_count == 2
         assert (tmp_path / "etf1.csv").exists()
@@ -150,9 +144,11 @@ class TestDownloadCsvIfOld:
         mock_session = MagicMock()
         mock_session.get.side_effect = Exception("Verbindung fehlgeschlagen")
 
-        with patch("scripts.data_download._create_retry_session", return_value=mock_session), \
-             caplog.at_level(logging.ERROR, logger="scripts.data_download"):
-                download_csv_if_old(["http://example.com/fail.csv"], str(tmp_path), ["fail.csv"])
+        with (
+            patch("scripts.data_download._create_retry_session", return_value=mock_session),
+            caplog.at_level(logging.ERROR, logger="scripts.data_download"),
+        ):
+            download_csv_if_old(["http://example.com/fail.csv"], str(tmp_path), ["fail.csv"])
 
         assert any("Fehler" in r.message for r in caplog.records)
 
@@ -161,14 +157,17 @@ class TestDownloadCsvIfOld:
 # Tests: download_stock_price – Fallback-Logik (gemockt)
 # ---------------------------------------------------------------------------
 
+
 class TestDownloadStockPriceFallback:
     """Testet die Fallback-Logik ohne echte yFinance-Aufrufe."""
 
     def _depot_df(self):
-        return pd.DataFrame({
-            "Art":    ["Aktie", "Krypto"],
-            "Ticker": ["AAPL",  "BTC"],
-        })
+        return pd.DataFrame(
+            {
+                "Art": ["Aktie", "Krypto"],
+                "Ticker": ["AAPL", "BTC"],
+            }
+        )
 
     def test_fallback_kurs_wird_verwendet_wenn_kein_live_kurs(self, tmp_path):
         """Wenn yFinance keinen Kurs liefert, wird der Fallback-JSON-Kurs eingesetzt."""
@@ -177,8 +176,10 @@ class TestDownloadStockPriceFallback:
 
         empty_df = pd.DataFrame()
 
-        with patch("scripts.data_download._FALLBACK_JSON", json_path), \
-             patch("scripts.data_download.yf.download", return_value=empty_df):
+        with (
+            patch("scripts.data_download._FALLBACK_JSON", json_path),
+            patch("scripts.data_download.yf.download", return_value=empty_df),
+        ):
             _save_fallback(fallback_data)
             prices, fallback_used = download_stock_price(self._depot_df())
 
@@ -188,16 +189,13 @@ class TestDownloadStockPriceFallback:
         """Wenn ein Live-Kurs gefunden wird, wird er in den Fallback geschrieben."""
         json_path = str(tmp_path / "fallback.json")
 
-        close_data = pd.DataFrame(
-            {"AAPL.DE": [155.0], "BTC-EUR": [48000.0]},
-            index=[pd.Timestamp("2024-01-15")]
-        )
-        close_data.columns = pd.MultiIndex.from_tuples(
-            [("Close", "AAPL.DE"), ("Close", "BTC-EUR")]
-        )
+        close_data = pd.DataFrame({"AAPL.DE": [155.0], "BTC-EUR": [48000.0]}, index=[pd.Timestamp("2024-01-15")])
+        close_data.columns = pd.MultiIndex.from_tuples([("Close", "AAPL.DE"), ("Close", "BTC-EUR")])
 
-        with patch("scripts.data_download._FALLBACK_JSON", json_path), \
-             patch("scripts.data_download.yf.download", return_value=close_data):
+        with (
+            patch("scripts.data_download._FALLBACK_JSON", json_path),
+            patch("scripts.data_download.yf.download", return_value=close_data),
+        ):
             _save_fallback({})
             prices, _ = download_stock_price(self._depot_df())
 
@@ -206,4 +204,3 @@ class TestDownloadStockPriceFallback:
             saved = json.load(f)
         # Mindestens eine der Positionen sollte gespeichert sein (je nach yf-Response-Format)
         assert isinstance(saved, dict)
-

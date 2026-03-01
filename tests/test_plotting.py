@@ -24,6 +24,7 @@ from scripts.plotting import (
 # Tests: _de (deutsches Zahlenformat)
 # ---------------------------------------------------------------------------
 
+
 class TestDeFormat:
     def test_tausenderpunkt(self):
         assert _de(1234.56) == "1.234,56"
@@ -75,19 +76,22 @@ class TestDeFormat:
 # Tests: build_depot_table
 # ---------------------------------------------------------------------------
 
+
 class TestBuildDepotTable:
     def _sample_depot(self):
-        return pd.DataFrame({
-            "Ticker":       ["AAPL", "BTC", "-"],
-            "Art":          ["Aktie", "Krypto", "Cash"],
-            "Position":     ["Apple Inc.", "Bitcoin", "Cash"],
-            "Sektor":       ["Technologie", "Krypto", "Cash"],
-            "Standort":     ["USA", "Krypto", "Cash"],
-            "Anteile":      [10.0, 0.01, 1000.0],
-            "Kurs":         [150.0, 45000.0, 1.0],
-            "Marktwert":    [1500.0, 450.0, 1000.0],
-            "Marktwert (%)": [50.83, 15.25, 33.92],
-        })
+        return pd.DataFrame(
+            {
+                "Ticker": ["AAPL", "BTC", "-"],
+                "Art": ["Aktie", "Krypto", "Cash"],
+                "Position": ["Apple Inc.", "Bitcoin", "Cash"],
+                "Sektor": ["Technologie", "Krypto", "Cash"],
+                "Standort": ["USA", "Krypto", "Cash"],
+                "Anteile": [10.0, 0.01, 1000.0],
+                "Kurs": [150.0, 45000.0, 1.0],
+                "Marktwert": [1500.0, 450.0, 1000.0],
+                "Marktwert (%)": [50.83, 15.25, 33.92],
+            }
+        )
 
     def test_gibt_html_zurueck(self):
         html = build_depot_table(self._sample_depot())
@@ -120,23 +124,26 @@ class TestBuildDepotTable:
         assert "–" in html
 
     def test_leeres_depot_gibt_tabelle_zurueck(self):
-        empty = pd.DataFrame(columns=["Ticker", "Art", "Position", "Sektor",
-                                       "Standort", "Anteile", "Kurs", "Marktwert", "Marktwert (%)"])
+        empty = pd.DataFrame(
+            columns=["Ticker", "Art", "Position", "Sektor", "Standort", "Anteile", "Kurs", "Marktwert", "Marktwert (%)"]
+        )
         html = build_depot_table(empty)
         assert "<table" in html
 
     def test_nur_cash_position(self):
-        depot = pd.DataFrame({
-            "Ticker":        ["-"],
-            "Art":           ["Cash"],
-            "Position":      ["Cash"],
-            "Sektor":        ["Cash"],
-            "Standort":      ["Cash (Euro)"],
-            "Anteile":       [2500.0],
-            "Kurs":          [1.0],
-            "Marktwert":     [2500.0],
-            "Marktwert (%)": [100.0],
-        })
+        depot = pd.DataFrame(
+            {
+                "Ticker": ["-"],
+                "Art": ["Cash"],
+                "Position": ["Cash"],
+                "Sektor": ["Cash"],
+                "Standort": ["Cash (Euro)"],
+                "Anteile": [2500.0],
+                "Kurs": [1.0],
+                "Marktwert": [2500.0],
+                "Marktwert (%)": [100.0],
+            }
+        )
         html = build_depot_table(depot)
         assert "Cash" in html
         assert "2.500,00" in html
@@ -146,12 +153,15 @@ class TestBuildDepotTable:
 # Tests: build_pie_chart
 # ---------------------------------------------------------------------------
 
+
 class TestBuildPieChart:
     def _sample_df(self):
-        return pd.DataFrame({
-            "Art":           ["ETF", "Aktie", "Cash"],
-            "Marktwert (%)": [60.0, 25.0, 15.0],
-        })
+        return pd.DataFrame(
+            {
+                "Art": ["ETF", "Aktie", "Cash"],
+                "Marktwert (%)": [60.0, 25.0, 15.0],
+            }
+        )
 
     def test_gibt_figure_zurueck(self):
         fig = build_pie_chart(self._sample_df(), "Marktwert (%)", "Art", "Test")
@@ -178,22 +188,27 @@ class TestBuildPieChart:
 # Tests: build_bar_chart
 # ---------------------------------------------------------------------------
 
+
 class TestBuildBarChart:
     def _sample_df(self):
-        return pd.DataFrame({
-            "Name":                ["Apple", "Microsoft", "Google", "Amazon"],
-            "Gesamtgewichtung (%)": [5.5, 4.2, 3.8, 2.1],
-        })
+        return pd.DataFrame(
+            {
+                "Name": ["Apple", "Microsoft", "Google", "Amazon"],
+                "Gesamtgewichtung (%)": [5.5, 4.2, 3.8, 2.1],
+            }
+        )
 
     def test_gibt_figure_zurueck(self):
         fig = build_bar_chart(self._sample_df(), "Gesamtgewichtung (%)", "Name", "Top Aktien")
         assert fig is not None
 
     def test_top_n_begrenzt_eintraege(self):
-        df = pd.DataFrame({
-            "Name": [f"Aktie {i}" for i in range(30)],
-            "Wert": list(range(30)),
-        })
+        df = pd.DataFrame(
+            {
+                "Name": [f"Aktie {i}" for i in range(30)],
+                "Wert": list(range(30)),
+            }
+        )
         fig = build_bar_chart(df, "Wert", "Name", "Test", top_n=10)
         assert len(fig.data[0]["y"]) <= 10
 
@@ -215,13 +230,16 @@ class TestBuildBarChart:
 # Tests: build_treemap
 # ---------------------------------------------------------------------------
 
+
 class TestBuildTreemap:
     def _sample_df(self):
-        return pd.DataFrame({
-            "Sektor":                ["Technologie", "Technologie", "Finanzen"],
-            "Name":                  ["Apple", "Microsoft", "JPMorgan"],
-            "relative Gewichtung (%)": [5.0, 4.0, 3.0],
-        })
+        return pd.DataFrame(
+            {
+                "Sektor": ["Technologie", "Technologie", "Finanzen"],
+                "Name": ["Apple", "Microsoft", "JPMorgan"],
+                "relative Gewichtung (%)": [5.0, 4.0, 3.0],
+            }
+        )
 
     def test_gibt_figure_zurueck(self):
         fig = build_treemap(self._sample_df(), ["Sektor", "Name"], "relative Gewichtung (%)", "Test")
@@ -237,11 +255,11 @@ class TestBuildTreemap:
 # Tests: build_heatmap
 # ---------------------------------------------------------------------------
 
+
 class TestBuildHeatmap:
     def _sample_pivot(self):
         return pd.DataFrame(
-            [[5.0, 2.0, 0.0],
-             [1.0, 3.0, 4.0]],
+            [[5.0, 2.0, 0.0], [1.0, 3.0, 4.0]],
             index=["Technologie", "Finanzen"],
             columns=["ETF A", "ETF B", "Aktie"],
         )
@@ -272,4 +290,3 @@ class TestBuildHeatmap:
         fig = build_heatmap(pivot, "Test")
         assert fig.data[0]["z"].shape == (2, 3)
         assert fig.data[0]["z"].shape == (2, 3)
-

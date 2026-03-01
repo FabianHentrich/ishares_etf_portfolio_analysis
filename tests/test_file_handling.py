@@ -18,6 +18,7 @@ from scripts.file_handling import export_to_excel, read_etf_data
 # Hilfsfunktionen
 # ---------------------------------------------------------------------------
 
+
 def _make_csv(tmp_path, content, filename="test_etf.csv"):
     """Schreibt eine CSV-Datei in tmp_path und gibt den Pfad zurück."""
     path = tmp_path / filename
@@ -34,6 +35,7 @@ def _sample_dfs():
 # ---------------------------------------------------------------------------
 # Tests: read_etf_data
 # ---------------------------------------------------------------------------
+
 
 class TestReadEtfData:
     def test_liest_gueltige_csv(self, tmp_path):
@@ -98,6 +100,7 @@ class TestReadEtfData:
 # Tests: export_to_excel
 # ---------------------------------------------------------------------------
 
+
 class TestExportToExcel:
     def test_erstellt_excel_datei(self, tmp_path):
         """Export soll eine gültige Excel-Datei erzeugen."""
@@ -133,10 +136,7 @@ class TestExportToExcel:
         """Nicht schreibbarer Pfad → ERROR geloggt, kein unkontrollierter Absturz."""
         depot, data, stocks, etfs, sectors, locs = _sample_dfs()
         with caplog.at_level(logging.ERROR, logger="scripts.file_handling"):
-            export_to_excel(
-                "/nicht/existierender/pfad/output.xlsx",
-                depot, data, stocks, etfs, sectors, locs
-            )
+            export_to_excel("/nicht/existierender/pfad/output.xlsx", depot, data, stocks, etfs, sectors, locs)
         assert any("Fehler" in r.message for r in caplog.records)
 
     def test_loggt_erfolg(self, tmp_path, caplog):
@@ -146,4 +146,3 @@ class TestExportToExcel:
         with caplog.at_level(logging.INFO, logger="scripts.file_handling"):
             export_to_excel(output, depot, data, stocks, etfs, sectors, locs)
         assert any("erfolgreich" in r.message for r in caplog.records)
-
