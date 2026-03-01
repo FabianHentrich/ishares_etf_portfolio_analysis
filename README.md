@@ -32,6 +32,7 @@ Die Ergebnisse werden als **interaktiver HTML-Report** (Pie-Charts, Treemaps, Ba
 | **Diversifikations-Score (HHI)** | HHI-Metrik (Skala 0–100, FTC/DoJ-Standard) mit Qualitätsstufe, Positionen, Sektoren, Ländern |
 | **Top-5-Konzentration** | Anteil der 5 größten Positionen am Gesamtdepot (inkl. ETF-Durchblick), mit ⚠️ bei > 40 % |
 | **Robuste Fehlerbehandlung** | Explizite Warnungen bei fehlenden Kursen, falschem `.env`-Setup oder unvollständigen Metadaten |
+| **Datenschutz-Modus** | 🔒-Schalter in der Navigation blendet Gesamtwert, Anteile und Marktwerte aus – Zustand wird gespeichert |
 | **Log-Rotation** | Haupt-Log (`portfolio_analysis.log`) + separater Error-Log (`portfolio_errors.log`) |
 
 ### KPI-Cards im HTML-Report
@@ -45,6 +46,8 @@ Der Report zeigt oben drei Gruppen von Kennzahlen:
 | **Qualität** | Diversifikation (HHI) · Top-5-Konzentration |
 
 Bei fehlenden Live-Kursen erscheint zusätzlich eine ⚠️-Karte mit den betroffenen Tickern.
+
+> **🔒 Datenschutz-Modus:** Über den Schalter oben links in der Navigation lassen sich Gesamtwert, Anteile und Marktwerte in der Tabelle und den KPI-Cards ausblenden (Werte werden unlesbar gemacht, Layout bleibt stabil). Der Zustand wird im Browser gespeichert und beim nächsten Öffnen wiederhergestellt.
 
 ### Charts im HTML-Report
 
@@ -308,6 +311,32 @@ EXCL_LOCATIONS = {'-', 'nan', 'Krypto', 'Cash', 'Cash (Euro)'}
 ```
 
 Falls neue Cash- oder Derivate-Bezeichnungen aus iShares-CSVs auftauchen, nur hier ergänzen.
+
+### Datenschutz-Modus
+
+Der **🔒 Privat-Schalter** oben links in der Navigationsleiste des HTML-Reports blendet alle absoluten Vermögenswerte aus, ohne das Layout zu verändern.
+
+**Ausgeblendete Werte:**
+
+| Bereich | Ausgeblendete Felder |
+|---|---|
+| KPI-Card | Gesamtwert |
+| Depotübersicht (Tabelle) | Anteile · Kurs (€) · Marktwert (€) |
+
+Prozentwerte, Positionsnamen und alle Charts bleiben sichtbar – die Struktur des Depots ist erkennbar, absolute Zahlen sind nicht.
+
+**Technische Umsetzung:**
+- Sensible Elemente erhalten die CSS-Klasse `private`
+- Im Privat-Modus wird `color: transparent` + `text-shadow` gesetzt → Text wird unlesbar, Spaltenbreiten bleiben stabil
+- Zustand wird via `localStorage` persistiert → bleibt beim nächsten Öffnen des Reports erhalten
+
+```css
+/* Privat-Modus aktiv: body.privacy-on */
+body.privacy-on .private {
+    color: transparent;
+    text-shadow: 0 0 8px rgba(0,0,0,0.35);
+}
+```
 
 ### Debugging
 

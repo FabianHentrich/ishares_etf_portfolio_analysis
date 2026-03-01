@@ -65,6 +65,8 @@ def build_depot_table(depot_df):
     }
     # Numerische Spalten – für korrekte Sortierung als Zahl behandeln
     numeric_cols = {"Anteile", "Kurs (€)", "Marktwert (€)", "Anteil (%)"}
+    # Sensible Spalten – werden im Datenschutz-Modus ausgeblendet
+    private_cols = {"Anteile", "Kurs (€)", "Marktwert (€)"}
 
     df = depot_df[[c for c in display_cols if c in depot_df.columns]].copy()
     df = df.rename(columns=display_cols)
@@ -100,14 +102,17 @@ def build_depot_table(depot_df):
     cols = list(df.columns)
     td_parts = []
     for col in cols:
+        is_priv  = col in private_cols
+        priv_cls = ' class="private"' if is_priv else ''
         if col in numeric_cols and col in raw_values:
             raws = raw_values[col]
             vals = df[col].tolist()
             td_parts.append(
-                [f'<td data-sort="{r if pd.notna(r) else -1e18}">{v}</td>' for r, v in zip(raws, vals, strict=True)]
+                [f'<td data-sort="{r if pd.notna(r) else -1e18}"{priv_cls}>{v}</td>'
+                 for r, v in zip(raws, vals, strict=True)]
             )
         else:
-            td_parts.append([f"<td>{v}</td>" for v in df[col].tolist()])
+            td_parts.append([f"<td{priv_cls}>{v}</td>" for v in df[col].tolist()])
 
     rows = ""
     for i in range(len(df)):
@@ -311,10 +316,14 @@ def export_html_report(sections, output_file, depot_summary=None):
         assigned = {k for keys in group_keys.values() for k in keys}
         extra_keys = [k for k in depot_summary if k not in assigned]
 
+        # Schlüssel deren Wert im Datenschutz-Modus ausgeblendet wird
+        _private_keys = {"Gesamtwert"}
+
         def _card(k, v):
             is_warning = "⚠️" in str(k) or "⚠️" in str(v)
-            cls = "kpi-card kpi-warning" if is_warning else "kpi-card"
-            return f'<div class="{cls}"><div class="kpi-value">{v}</div><div class="kpi-label">{k}</div></div>'
+            cls      = "kpi-card kpi-warning" if is_warning else "kpi-card"
+            val_cls  = "kpi-value private" if k in _private_keys else "kpi-value"
+            return f'<div class="{cls}"><div class="{val_cls}">{v}</div><div class="kpi-label">{k}</div></div>'
 
         groups_html = ""
         for _gname, keys in group_keys.items():
@@ -390,6 +399,28 @@ def export_html_report(sections, output_file, depot_summary=None):
         nav ul {{ list-style: none; }}
         nav ul li a {{ display: block; padding: 9px 20px; color: #cdd3e0; text-decoration: none; font-size: 0.88rem; border-left: 3px solid transparent; transition: all 0.15s; }}
         nav ul li a:hover {{ background: #243058; border-left-color: #4e8cff; color: #fff; }}
+
+        /* ---- Datenschutz-Schalter ---- */
+        .privacy-toggle {{ display: flex; align-items: center; gap: 10px; padding: 10px 20px 18px; border-bottom: 1px solid #243058; margin-bottom: 10px; }}
+        .privacy-toggle span {{ font-size: 0.8rem; color: #7a84a0; user-select: none; }}
+        .toggle-switch {{ position: relative; width: 36px; height: 20px; flex-shrink: 0; cursor: pointer; }}
+        .toggle-switch input {{ opacity: 0; width: 0; height: 0; }}
+        .toggle-track {{ position: absolute; inset: 0; background: #3a4560; border-radius: 20px; transition: background 0.2s; }}
+        .toggle-track::after {{ content: ''; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; background: #fff; border-radius: 50%; transition: transform 0.2s; }}
+        .toggle-switch input:checked + .toggle-track {{ background: #4e8cff; }}
+        .toggle-switch input:checked + .toggle-track::after {{ transform: translateX(16px); }}
+
+        /* ---- Privat-Modus: sensible Werte ausblenden ---- */
+        body.privacy-on .private {{
+            color: transparent !important;
+            text-shadow: 0 0 8px rgba(0,0,0,0.35);
+            user-select: none;
+            transition: color 0.2s, text-shadow 0.2s;
+        }}
+        body:not(.privacy-on) .private {{
+            transition: color 0.2s, text-shadow 0.2s;
+        }}
+
         main {{ margin-left: 230px; padding: 36px 40px; max-width: 1400px; }}
         header {{ margin-bottom: 32px; }}
         header h1 {{ font-size: 1.9rem; font-weight: 700; color: #1a2340; }}
@@ -435,7 +466,18 @@ def export_html_report(sections, output_file, depot_summary=None):
     </style>
 </head>
 <body>
-    <nav><h3>Navigation</h3><ul>{nav_items}</ul></nav>
+    <nav>
+        <!-- Datenschutz-Schalter -->
+        <div class="privacy-toggle">
+            <label class="toggle-switch" title="Vermögenswerte ausblenden">
+                <input type="checkbox" id="privacy-cb" onchange="setPrivacy(this.checked)">
+                <div class="toggle-track"></div>
+            </label>
+            <span>🔒 Privat</span>
+        </div>
+        <h3>Navigation</h3>
+        <ul>{nav_items}</ul>
+    </nav>
     <main>
         <header>
             <h1>📊 Portfolio-Analyse</h1>
@@ -453,6 +495,18 @@ def export_html_report(sections, output_file, depot_summary=None):
     {plotlyjs_tag}
 
     <script>
+    // ---- Datenschutz-Modus ----
+    function setPrivacy(on) {{
+        document.body.classList.toggle('privacy-on', on);
+        localStorage.setItem('portfolio_privacy', on ? '1' : '0');
+        document.getElementById('privacy-cb').checked = on;
+    }}
+    // Zustand beim Laden wiederherstellen
+    document.addEventListener('DOMContentLoaded', function() {{
+        const saved = localStorage.getItem('portfolio_privacy');
+        if (saved === '1') setPrivacy(true);
+    }});
+
     const _divIds   = {chart_div_ids};
     const _rendered = new Set();
 
@@ -465,7 +519,7 @@ def export_html_report(sections, output_file, depot_summary=None):
         _observer.unobserve(el);
         const dataEl = document.getElementById('data-' + id);
         if (!dataEl) return;
-        const spec = JSON.parse(dataEl.textContent);   // erst beim Render parsen
+        const spec = JSON.parse(dataEl.textContent);
         el.innerHTML = '';
         Plotly.newPlot(el, spec.data, spec.layout,
             {{displayModeBar: true, scrollZoom: false, responsive: true}});
@@ -476,7 +530,6 @@ def export_html_report(sections, output_file, depot_summary=None):
         {{rootMargin: '9999px'}}
     );
 
-    // Observer erst nach DOMContentLoaded → Plotly.js ist vollständig geladen
     document.addEventListener('DOMContentLoaded', function() {{
         _divIds.forEach(id => {{
             const el = document.getElementById(id);
