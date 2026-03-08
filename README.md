@@ -33,6 +33,7 @@ Die Ergebnisse werden als **interaktiver HTML-Report** (Pie-Charts, Treemaps, Ba
 | **Top-5-Konzentration** | Anteil der 5 größten Positionen am Gesamtdepot (inkl. ETF-Durchblick), mit ⚠️ bei > 40 % |
 | **Robuste Fehlerbehandlung** | Explizite Warnungen bei fehlenden Kursen, falschem `.env`-Setup oder unvollständigen Metadaten |
 | **Datenschutz-Modus** | 🔒-Schalter in der Navigation blendet Gesamtwert, Anteile und Marktwerte aus – Zustand wird gespeichert |
+| **Mobil-kompatibel** | Responsive Layout: Hamburger-Menü auf kleinen Bildschirmen, Charts und Tabellen skalieren automatisch |
 | **Log-Rotation** | Haupt-Log (`portfolio_analysis.log`) + separater Error-Log (`portfolio_errors.log`) |
 
 ### KPI-Cards im HTML-Report
@@ -337,6 +338,22 @@ body.privacy-on .private {
     text-shadow: 0 0 8px rgba(0,0,0,0.35);
 }
 ```
+
+> Auf Mobile ist der 🔒-Schalter über das Hamburger-Menü (☰) oben links erreichbar.
+
+### Mobile-Kompatibilität
+
+Der HTML-Report ist vollständig responsiv. Unterhalb von 768 px Breite greift ein eigenes Layout:
+
+| Element | Desktop | Mobile |
+|---|---|---|
+| Navigation | Feste Seitenleiste (links) | Hamburger-Menü (☰), klappt als Overlay auf |
+| `main`-Bereich | `margin-left: 230px` | Volle Breite, reduziertes Padding |
+| KPI-Gruppen | Horizontal nebeneinander | Vertikal gestapelt |
+| Charts | `min-height: 420px` (Placeholder bis Lazy-Load) | `responsive: true` |
+| Tabelle | Feste Spaltenbreiten | Horizontales Scrollen (`overflow-x: auto`) |
+
+Nav-Links schließen das Menü auf Mobile automatisch beim Antippen.
 
 ### Debugging
 

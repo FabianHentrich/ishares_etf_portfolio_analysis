@@ -463,10 +463,40 @@ def export_html_report(sections, output_file, depot_summary=None):
         .depot-table tbody tr:hover {{ background: #eef2ff; }}
         .depot-table td {{ padding: 8px 14px; border-bottom: 1px solid #e8ecf0; white-space: nowrap; }}
         footer {{ color: #aaa; font-size: 0.8rem; padding: 24px 0 8px; text-align: center; }}
+
+        /* ---- Mobile (≤ 768px) ---- */
+        .nav-toggle {{
+            display: none; position: fixed; top: 12px; left: 12px; z-index: 9999;
+            background: #1a2340; border: none; color: #cdd3e0; font-size: 1.5rem;
+            width: 44px; height: 44px; border-radius: 8px; cursor: pointer;
+            align-items: center; justify-content: center; line-height: 1;
+            -webkit-tap-highlight-color: transparent;
+        }}
+        @media (max-width: 768px) {{
+            .nav-toggle {{ display: flex; }}
+            nav {{
+                display: none;
+                position: fixed;
+                top: 0; left: 0;
+                width: 100%; height: 100vh;
+                z-index: 1000;
+                overflow-y: auto;
+                padding: 60px 0 16px;
+                background: #1a2340;
+            }}
+            nav.open {{ display: block; }}
+            main {{ margin-left: 0; padding: 70px 16px 24px; }}
+            header h1 {{ font-size: 1.4rem; }}
+            .kpi-row {{ flex-direction: column; }}
+            .kpi-group {{ border-left: none !important; border-top: 3px solid #e8ecf0; }}
+            .kpi-group:first-child {{ border-top: none; }}
+            .chart-section {{ padding: 18px 16px; }}
+        }}
     </style>
 </head>
 <body>
-    <nav>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Navigation öffnen">☰</button>
+    <nav id="main-nav">
         <!-- Datenschutz-Schalter -->
         <div class="privacy-toggle">
             <label class="toggle-switch" title="Vermögenswerte ausblenden">
@@ -488,54 +518,86 @@ def export_html_report(sections, output_file, depot_summary=None):
         <footer>Automatisch generiert · {now}</footer>
     </main>
 
-    <!-- Chart-JSON: type=application/json → kein JS-Parsing beim Seitenload, blockiert keinen Paint -->
+    <!-- Chart-JSON: type=application/json → kein JS-Parsing beim Seitenload -->
     {chart_data_tags}
+
+    <!-- Kritische Funktionen VOR Plotly.js: toggleNav und setPrivacy müssen sofort verfügbar sein -->
+    <script>
+    function toggleNav() {{
+        const nav = document.getElementById('main-nav');
+        const btn = document.getElementById('nav-toggle');
+        const open = nav.classList.toggle('open');
+        btn.textContent = open ? '✕' : '☰';
+        btn.setAttribute('aria-label', open ? 'Navigation schließen' : 'Navigation öffnen');
+    }}
+
+    function setPrivacy(on) {{
+        document.body.classList.toggle('privacy-on', on);
+        localStorage.setItem('portfolio_privacy', on ? '1' : '0');
+        const cb = document.getElementById('privacy-cb');
+        if (cb) cb.checked = on;
+    }}
+
+    // Privacy-Zustand sofort wiederherstellen (vor Plotly.js)
+    (function() {{
+        try {{ if (localStorage.getItem('portfolio_privacy') === '1') setPrivacy(true); }} catch(e) {{}}
+    }})();
+
+    // Burger-Menü per addEventListener (robuster als inline onclick auf Mobile)
+    document.getElementById('nav-toggle').addEventListener('click', toggleNav);
+
+    // Nav-Links schließen Menü auf Mobile
+    document.addEventListener('click', function(e) {{
+        const link = e.target.closest('nav a');
+        if (link && window.innerWidth <= 768) {{
+            document.getElementById('main-nav').classList.remove('open');
+            document.getElementById('nav-toggle').textContent = '☰';
+            document.getElementById('nav-toggle').setAttribute('aria-label', 'Navigation öffnen');
+        }}
+    }});
+    </script>
 
     <!-- Plotly.js inline (kein CDN, keine Netzwerkabhängigkeit) -->
     {plotlyjs_tag}
 
+    <!-- Chart-Rendering: Lazy-Loading via IntersectionObserver (rootMargin 200px = lädt kurz vor Sichtbarkeit) -->
     <script>
-    // ---- Datenschutz-Modus ----
-    function setPrivacy(on) {{
-        document.body.classList.toggle('privacy-on', on);
-        localStorage.setItem('portfolio_privacy', on ? '1' : '0');
-        document.getElementById('privacy-cb').checked = on;
-    }}
-    // Zustand beim Laden wiederherstellen
-    document.addEventListener('DOMContentLoaded', function() {{
-        const saved = localStorage.getItem('portfolio_privacy');
-        if (saved === '1') setPrivacy(true);
-    }});
+    (function() {{
+        var _divIds = {chart_div_ids};
+        var _rendered = new Set();
 
-    const _divIds   = {chart_div_ids};
-    const _rendered = new Set();
+        function renderChart(id) {{
+            if (_rendered.has(id)) return;
+            _rendered.add(id);
+            var el = document.getElementById(id);
+            var dataEl = document.getElementById('data-' + id);
+            if (!el || !dataEl) return;
+            try {{
+                var spec = JSON.parse(dataEl.textContent);
+                el.innerHTML = '';
+                Plotly.newPlot(el, spec.data, spec.layout,
+                    {{displayModeBar: true, scrollZoom: false, responsive: true}});
+            }} catch(err) {{
+                el.innerHTML = '<p style="color:#c00;padding:1rem">Fehler: ' + err + '</p>';
+            }}
+        }}
 
-    function _renderChart(entry) {{
-        if (!entry.isIntersecting) return;
-        const el = entry.target;
-        const id = el.id;
-        if (_rendered.has(id)) return;
-        _rendered.add(id);
-        _observer.unobserve(el);
-        const dataEl = document.getElementById('data-' + id);
-        if (!dataEl) return;
-        const spec = JSON.parse(dataEl.textContent);
-        el.innerHTML = '';
-        Plotly.newPlot(el, spec.data, spec.layout,
-            {{displayModeBar: true, scrollZoom: false, responsive: true}});
-    }}
+        var observer = new IntersectionObserver(function(entries) {{
+            entries.forEach(function(entry) {{
+                if (entry.isIntersecting) {{
+                    renderChart(entry.target.id);
+                    observer.unobserve(entry.target);
+                }}
+            }});
+        }}, {{ rootMargin: '200px' }});
 
-    const _observer = new IntersectionObserver(
-        entries => entries.forEach(_renderChart),
-        {{rootMargin: '9999px'}}
-    );
-
-    document.addEventListener('DOMContentLoaded', function() {{
-        _divIds.forEach(id => {{
-            const el = document.getElementById(id);
-            if (el) _observer.observe(el);
+        // Script steht nach Plotly.js am Ende von <body> → DOM ist garantiert fertig geparst,
+        // kein DOMContentLoaded-Wrapper nötig (würde auf mobilen Browsern ggf. zu spät feuern)
+        _divIds.forEach(function(id) {{
+            var el = document.getElementById(id);
+            if (el) observer.observe(el);
         }});
-    }});
+    }})();
 
     // ---- Tabellensortierung ----
     let _sortCol = -1, _sortAsc = true;
