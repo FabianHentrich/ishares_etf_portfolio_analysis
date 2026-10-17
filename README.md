@@ -126,7 +126,7 @@ STOCK_TICKER_SUFFIXES=".DE, .F"        # Xetra zuerst, Frankfurt als Fallback
 CRYPTO_TICKER_SUFFIXES="-EUR"          # Krypto in Euro
 ```
 
-> **Backslashes in Pfaden:** In doppelten Anführungszeichen liest python-dotenv `\n`, `\t` usw. als Steuerzeichen. Beginnt ein Ordnername mit `n`, `t`, `r`, `b`, `f`, `u` oder `x`, doppelte Backslashes (`C:\\Users\\tom`) oder Schrägstriche (`C:/Users/tom`) verwenden. Eine Vorlage liegt in [`.env.example`](.env.example).
+> **Backslashes in Pfaden:** In doppelten Anführungszeichen liest python-dotenv `\n`, `\t` usw. als Steuerzeichen. Beginnt ein Ordnername mit `a`, `b`, `f`, `n`, `r`, `t` oder `v`, doppelte Backslashes (`C:\\Users\\tom`) oder Schrägstriche (`C:/Users/tom`) verwenden. Eine Vorlage liegt in [`.env.example`](.env.example).
 
 > **Wo finde ich die CSV-URLs?**  
 > Auf der BlackRock/iShares-Produktseite des jeweiligen ETFs → Bereich „Positionen" → Download der Fondspositionen → Rechtsklick → Link kopieren.  
