@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import unicodedata
 
 import pandas as pd
@@ -149,6 +150,77 @@ def clean_etf_data(df):
 
     logger.info(f"ETF-Daten bereinigt: {len(df)} verwertbare Positionen (ohne Cash/Derivate/0%-Zeilen).")
     return df
+
+
+# Rechtsform-/Gattungszusätze, die beim Namensabgleich Einzelaktie ↔ ETF-Position ignoriert werden
+_NAME_SUFFIXES = {
+    "INC", "CORP", "CORPORATION", "CO", "COMPANY", "LTD", "LIMITED", "PLC", "SE", "AG", "SA",
+    "NV", "AS", "ASA", "AB", "SPA", "OYJ", "KGAA", "HOLDING", "HOLDINGS", "GROUP",
+}  # fmt: skip
+
+
+def _name_key(name) -> str:
+    """Normalisierter Vergleichsschlüssel für Firmennamen.
+
+    'NVIDIA Corp.' → 'NVIDIA', 'Novo Nordisk A/S' → 'NOVO NORDISK', 'NOVO NORDISK CLASS B' → 'NOVO NORDISK'
+    """
+    if not isinstance(name, str):
+        return ""
+    s = _normalize_str(name).upper()
+    s = re.sub(r"[./']", "", s)  # N.V. → NV, A/S → AS
+    s = re.sub(r"[^A-Z0-9&]+", " ", s)
+    s = re.sub(r"\bCLASS [A-Z]\b", " ", s)
+    tokens = s.split()
+    # Zusätze nur am Ende entfernen, mindestens ein Token bleibt stehen
+    while len(tokens) > 1 and (tokens[-1] in _NAME_SUFFIXES or len(tokens[-1]) == 1):
+        tokens.pop()
+    return " ".join(tokens)
+
+
+def resolve_stock_names(depot, etf_names):
+    """
+    Ermittelt für jede Einzelaktie im Depot den Namen, unter dem sie in den ETF-CSVs geführt wird –
+    damit Direktbesitz und ETF-Anteil im Durchblick zu EINER Position zusammengefasst werden.
+
+    Reihenfolge:
+    1. Optionale Spalte 'ETF-Name' in der Depot-Excel (manuelle Zuordnung, hat Vorrang)
+    2. Exakt gleicher Name in den ETF-Daten
+    3. Automatischer Abgleich über _name_key – nur bei eindeutigem Treffer
+
+    :param depot: Depot-DataFrame mit Spalten 'Art', 'Position' (optional 'ETF-Name')
+    :param etf_names: Iterable aller Positionsnamen aus den ETF-CSVs
+    :return: Series (Index wie depot) mit dem zu verwendenden Namen; für Nicht-Aktien = 'Position'
+    """
+    etf_names = {n for n in etf_names if isinstance(n, str)}
+    by_key: dict[str, set] = {}
+    for n in etf_names:
+        by_key.setdefault(_name_key(n), set()).add(n)
+
+    names = depot["Position"].copy()
+    has_manual = "ETF-Name" in depot.columns
+
+    for idx, row in depot[depot["Art"] == "Aktie"].iterrows():
+        position = row["Position"]
+        manual = _normalize_str(row["ETF-Name"]) if has_manual else None
+        if isinstance(manual, str) and manual not in ("", "-"):
+            names.at[idx] = manual
+            if manual not in etf_names:
+                logger.warning(f"ETF-Name '{manual}' für '{position}' kommt in keiner ETF-CSV vor – bitte prüfen.")
+            continue
+        if position in etf_names:
+            continue
+        candidates = by_key.get(_name_key(position), set())
+        if len(candidates) == 1:
+            match = next(iter(candidates))
+            names.at[idx] = match
+            # Kein '→' im Log: Windows-Konsole (cp1252) kann es nicht ausgeben
+            logger.info(f"Einzelaktie '{position}' -> ETF-Position '{match}' zugeordnet (Namensabgleich).")
+        elif len(candidates) > 1:
+            logger.warning(
+                f"Einzelaktie '{position}' passt zu mehreren ETF-Positionen {sorted(candidates)} – "
+                f"keine automatische Zuordnung. Bitte Spalte 'ETF-Name' in der Depot-Excel setzen."
+            )
+    return names
 
 
 def calculate_relative_weighting(etf_stocks, depot_components):

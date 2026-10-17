@@ -13,6 +13,7 @@ from scripts.data_processing import (
     EXCL_SECTORS,
     calculate_relative_weighting,
     clean_etf_data,
+    resolve_stock_names,
 )
 from scripts.file_handling import export_to_excel, read_etf_data
 from scripts.plotting import (
@@ -255,14 +256,15 @@ def main():
     # ------------------------------------------------------------------
     # 6. Assets zusammenführen
     # ------------------------------------------------------------------
+    # Einzelaktien unter ihrem ETF-Namen führen (z.B. 'NVIDIA CORP' → 'NVIDIA'),
+    # damit Direktbesitz und ETF-Anteil im Durchblick eine gemeinsame Position bilden
+    depot_names = resolve_stock_names(depot, etf_data["Name"].unique())
     assets = (
-        depot[depot["Art"].isin(["Aktie", "Krypto"])][
-            ["Ticker", "Art", "Position", "Sektor", "Standort", "Marktwert (%)"]
-        ]
+        depot[depot["Art"].isin(["Aktie", "Krypto"])][["Ticker", "Art", "Sektor", "Standort", "Marktwert (%)"]]
+        .assign(Name=depot_names)
         .rename(
             columns={
                 "Ticker": "Emittententicker",
-                "Position": "Name",
                 "Art": "ETF",
                 "Marktwert (%)": "relative Gewichtung (%)",
             }

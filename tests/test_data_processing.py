@@ -6,6 +6,7 @@ Getestet werden:
 - _normalize_str: Unicode-Bereinigung und Encoding-Artefakte
 - clean_etf_data: Filterung, Mapping, Sonstige-Fallback
 - calculate_relative_weighting: Gewichtungsberechnung, Edge Cases
+- _name_key / resolve_stock_names: Abgleich Einzelaktie ↔ ETF-Position
 """
 
 import logging
@@ -17,9 +18,11 @@ import pytest
 from scripts.data_processing import (
     LOCATION_MAPPING,
     SECTOR_MAPPING,
+    _name_key,
     _normalize_str,
     calculate_relative_weighting,
     clean_etf_data,
+    resolve_stock_names,
 )
 
 # ---------------------------------------------------------------------------
@@ -332,3 +335,89 @@ class TestMappingKonsistenz:
     def test_keine_leerzeichen_in_mapping_werten(self):
         for _k, v in {**SECTOR_MAPPING, **LOCATION_MAPPING}.items():
             assert v == v.strip(), f"Führende/nachfolgende Leerzeichen in Mapping-Wert '{v}'"
+
+
+# ---------------------------------------------------------------------------
+# Tests: Namensabgleich Einzelaktie ↔ ETF-Position
+# ---------------------------------------------------------------------------
+
+
+class TestNameKey:
+    @pytest.mark.parametrize(
+        ("name", "key"),
+        [
+            ("NVIDIA CORP", "NVIDIA"),
+            ("NVIDIA", "NVIDIA"),
+            ("ASML Holding N.V.", "ASML"),
+            ("Novo Nordisk A/S", "NOVO NORDISK"),
+            ("NOVO NORDISK CLASS B", "NOVO NORDISK"),
+            ("LVMH MOET HENNESSY LOUIS VUITTON SE", "LVMH MOET HENNESSY LOUIS VUITTON"),
+            ("AT&T Inc.", "AT&T"),
+            ("SAP SE", "SAP"),
+        ],
+    )
+    def test_normalisierung(self, name, key):
+        assert _name_key(name) == key
+
+    def test_saputo_ist_nicht_sap(self):
+        assert _name_key("SAPUTO") != _name_key("SAP SE")
+
+    def test_nichtstring(self):
+        assert _name_key(None) == ""
+
+
+def _depot_mit_aktien(positionen, etf_name_spalte=None):
+    data = {
+        "Art": ["ETF"] + ["Aktie"] * len(positionen) + ["Krypto"],
+        "Position": ["Test ETF", *positionen, "Bitcoin"],
+    }
+    if etf_name_spalte is not None:
+        data["ETF-Name"] = [None, *etf_name_spalte, None]
+    return pd.DataFrame(data)
+
+
+class TestResolveStockNames:
+    ETF_NAMES = ["NVIDIA", "ASML HOLDING", "ALPHABET CLASS A", "ALPHABET CLASS C", "SAP", "SAPUTO"]
+
+    def test_automatischer_abgleich(self):
+        depot = _depot_mit_aktien(["NVIDIA CORP", "ASML Holding N.V.", "SAP SE"])
+        result = resolve_stock_names(depot, self.ETF_NAMES)
+        assert list(result) == ["Test ETF", "NVIDIA", "ASML HOLDING", "SAP", "Bitcoin"]
+
+    def test_index_bleibt_erhalten(self):
+        depot = _depot_mit_aktien(["NVIDIA CORP"])
+        depot.index = [10, 20, 30]
+        result = resolve_stock_names(depot, self.ETF_NAMES)
+        assert list(result.index) == [10, 20, 30]
+
+    def test_mehrdeutiger_treffer_wird_nicht_zugeordnet(self, caplog):
+        depot = _depot_mit_aktien(["Alphabet Inc."])
+        with caplog.at_level(logging.WARNING, logger="scripts.data_processing"):
+            result = resolve_stock_names(depot, self.ETF_NAMES)
+        assert result.iloc[1] == "Alphabet Inc."
+        assert any("mehreren ETF-Positionen" in r.message for r in caplog.records)
+
+    def test_kein_treffer_behaelt_namen(self):
+        depot = _depot_mit_aktien(["REALTY INCOME CORP"])
+        assert resolve_stock_names(depot, self.ETF_NAMES).iloc[1] == "REALTY INCOME CORP"
+
+    def test_nur_aktien_werden_abgeglichen(self):
+        depot = pd.DataFrame({"Art": ["Krypto"], "Position": ["NVIDIA CORP"]})
+        assert resolve_stock_names(depot, self.ETF_NAMES).iloc[0] == "NVIDIA CORP"
+
+    def test_manuelle_spalte_hat_vorrang(self):
+        depot = _depot_mit_aktien(["Alphabet Inc.", "NVIDIA CORP"], etf_name_spalte=["ALPHABET CLASS C", None])
+        result = resolve_stock_names(depot, self.ETF_NAMES)
+        assert result.iloc[1] == "ALPHABET CLASS C"
+        assert result.iloc[2] == "NVIDIA"  # leere Zelle → automatischer Abgleich
+
+    def test_manuelle_spalte_mit_strich_wird_ignoriert(self):
+        depot = _depot_mit_aktien(["NVIDIA CORP"], etf_name_spalte=["-"])
+        assert resolve_stock_names(depot, self.ETF_NAMES).iloc[1] == "NVIDIA"
+
+    def test_unbekannter_manueller_name_warnt(self, caplog):
+        depot = _depot_mit_aktien(["NVIDIA CORP"], etf_name_spalte=["NVIDA"])
+        with caplog.at_level(logging.WARNING, logger="scripts.data_processing"):
+            result = resolve_stock_names(depot, self.ETF_NAMES)
+        assert result.iloc[1] == "NVIDA"
+        assert any("kommt in keiner ETF-CSV vor" in r.message for r in caplog.records)

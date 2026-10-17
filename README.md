@@ -146,6 +146,9 @@ Speichere deine Depotpositionen in einer Excel-Datei unter `INPUT_FILE`. Pflicht
 | `Sektor` | Sektor (nur für Einzelaktien relevant, bei ETFs `-`) | `Technologie`, `-` |
 | `Standort` | Land (nur für Einzelaktien relevant, bei ETFs `-`) | `USA`, `Frankreich`, `-` |
 | `Anteile` | Anzahl Anteile. Bei Cash: Betrag in Euro | `100`, `2500.00` |
+| `ETF-Name` *(optional)* | Nur für Einzelaktien: Name, unter dem die Aktie in den iShares-CSVs geführt wird. Nötig nur, wenn der automatische Abgleich nicht greift (siehe unten). Leer oder `-` = automatisch | `ALPHABET CLASS C` |
+
+> **Einzelaktie ↔ ETF-Position:** Damit Direktbesitz und ETF-Anteil im Durchblick als **eine** Position zählen (Top 20, HHI, Top-5), wird jede Einzelaktie automatisch dem gleichnamigen ETF-Eintrag zugeordnet – Rechtsform-Zusätze wie `Corp`, `Inc.`, `SE`, `N.V.`, `Class A` werden dabei ignoriert (`NVIDIA CORP` → `NVIDIA`). Bei mehrdeutigen Treffern (z. B. `Alphabet` → Class A *und* C) erfolgt keine Zuordnung und im Log erscheint eine `WARNING` – dann die Spalte `ETF-Name` setzen. Bestehende Depot-Dateien ohne diese Spalte funktionieren unverändert.
 
 **Beispiel:**
 
