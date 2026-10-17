@@ -24,7 +24,7 @@ Die Ergebnisse werden als **interaktiver HTML-Report** (Pie-Charts, Treemaps, Ba
 
 | Feature | Beschreibung |
 |---|---|
-| **ETF-Durchblick** | Gewichtung jeder ETF-Einzelposition wird auf das Gesamtdepot heruntergebrochen |
+| **ETF-Durchblick** | Gewichtung jeder ETF-Einzelposition wird auf das Gesamtdepot heruntergebrochen – direkt gehaltene Aktien werden mit ihrem ETF-Anteil zu einer Position zusammengeführt |
 | **Kurse via yFinance** | Automatischer Download für Aktien, ETFs und Kryptowährungen |
 | **Fallback-Kurse** | Bei fehlendem Live-Kurs wird auf gespeicherte Historien-Kurse zurückgegriffen (`price_fallback.json`) |
 | **HTML-Report** | Interaktiver, selbst-enthaltender Report mit Lazy-Loading – kein Webserver nötig |
@@ -126,6 +126,8 @@ STOCK_TICKER_SUFFIXES=".DE, .F"        # Xetra zuerst, Frankfurt als Fallback
 CRYPTO_TICKER_SUFFIXES="-EUR"          # Krypto in Euro
 ```
 
+> **Backslashes in Pfaden:** In doppelten Anführungszeichen liest python-dotenv `\n`, `\t` usw. als Steuerzeichen. Beginnt ein Ordnername mit `n`, `t`, `r`, `b`, `f`, `u` oder `x`, doppelte Backslashes (`C:\\Users\\tom`) oder Schrägstriche (`C:/Users/tom`) verwenden. Eine Vorlage liegt in [`.env.example`](.env.example).
+
 > **Wo finde ich die CSV-URLs?**  
 > Auf der BlackRock/iShares-Produktseite des jeweiligen ETFs → Bereich „Positionen" → Download der Fondspositionen → Rechtsklick → Link kopieren.  
 > Seit der Website-Umstellung 2026 haben die URLs das Format  
@@ -198,6 +200,8 @@ Initiale Standardwerte:
 }
 ```
 
+Ist die Datei beschädigt (ungültiges JSON), wird sie **nicht** überschrieben: Das Script sichert sie als `price_fallback.json.corrupt`, rechnet für diesen Lauf mit den Standardwerten und meldet eine `WARNING`. Zum Wiederherstellen die Sicherung reparieren und zurück nach `price_fallback.json` kopieren.
+
 ### Ticker-Suffixe
 
 Das Script probiert die konfigurierten Suffixe der Reihe nach aus (Batch-Download, dann Einzel-Fallback):
@@ -223,9 +227,14 @@ Für detailliertes Debugging kann der Log-Level temporär auf `DEBUG` gesetzt we
 |---|---|---|
 | `Fehlende Pflicht-Umgebungsvariablen` | `.env` unvollständig | Alle Pflicht-Variablen prüfen (siehe Abschnitt `.env`) |
 | `CSV_URL (n) und ETF_CSV_FILE (m) haben unterschiedlich viele Einträge` | Anzahl URLs und Dateinamen in `.env` stimmt nicht überein | Reihenfolge und Anzahl von `CSV_URL` und `ETF_CSV_FILE` angleichen |
+| `Download von '...' liefert keine iShares-Positions-CSV (evtl. HTML-Seite)` | `CSV_URL` veraltet – iShares liefert die Produktseite statt der CSV | URL im Format `…/produkte/<id>/<fondsname>/latest-holdings.csv` eintragen (siehe Abschnitt `.env`). Die vorhandene CSV bleibt so lange erhalten |
+| `Keine ETF-Daten verfügbar` / `Error tokenizing data` | CSV in `DOWNLOAD_PATH` fehlt oder ist keine echte CSV (z.B. alte, vor dem Fix gespeicherte HTML-Seite) | Datei löschen und Script neu starten – sie wird dann neu heruntergeladen |
+| `Nicht aufgelöste Sektoren → 'Sonstige'` | iShares verwendet einen Sektornamen, der nicht in `SECTOR_MAPPING` steht | Mapping ergänzen (siehe [Neue Sektoren oder Länder ergänzen](#neue-sektoren-oder-länder-ergänzen)) |
+| `Einzelaktie '...' passt zu mehreren ETF-Positionen` | Automatischer Namensabgleich ist mehrdeutig (z.B. Alphabet Class A/C) | Spalte `ETF-Name` in `portfolio.xlsx` mit dem gewünschten ETF-Namen füllen |
+| `ETF-Name '...' kommt in keiner ETF-CSV vor` | Tippfehler in der Spalte `ETF-Name` | Namen exakt wie in der iShares-CSV (Spalte `Name`) eintragen |
 | `ETF '...' nicht in ETF-CSV-Daten gefunden` | `Position`-Name in `portfolio.xlsx` weicht vom CSV-Dateinamen ab | Namen exakt angleichen (ohne `.csv`-Extension) |
 | `Einzelaktie(n) ohne Sektor/Standort` | `Sektor`/`Standort`-Spalte in `portfolio.xlsx` leer oder `-` | Sektor und Standort für Einzelaktien in `portfolio.xlsx` eintragen |
-| `Kein Live-Kurs für '...' – Fallback verwendet` | Ticker bei Yahoo Finance nicht gefunden oder delistet | Ticker in `price_fallback.json` manuell aktualisieren oder Ticker in `.env` anpassen |
+| `Kein Live-Kurs für '...' – Fallback verwendet` | Ticker bei Yahoo Finance nicht gefunden oder delistet | Ticker in `portfolio.xlsx` bzw. Suffixe in `.env` anpassen oder Kurs in `price_fallback.json` manuell aktualisieren |
 | `Gesamtwert ist 0` – Abbruch | Alle Kurse konnten nicht geladen werden | Netzwerkverbindung und Ticker-Suffixe in `.env` prüfen |
 | Charts laden nicht im Browser | Browser blockiert großes Inline-JS bei `file://` (Firefox) | Report in Edge/Chrome öffnen oder Script neu ausführen |
 | `OSError: Invalid argument` beim Excel-Lesen | Excel-Datei ist aktuell geöffnet und gesperrt | Excel-Datei schließen und Script neu starten |
@@ -250,8 +259,8 @@ Die Konfiguration liegt in `ruff.toml`. Geprüft werden: pyflakes, pycodestyle, 
 
 | Testdatei | Abgedeckte Bereiche |
 |---|---|
-| `test_data_processing.py` | `_normalize_str`, `clean_etf_data`, `calculate_relative_weighting`, Mapping-Konsistenz |
-| `test_data_download.py` | Fallback-JSON (lesen/schreiben/korrupt), CSV-Download (gemockt), Netzwerkfehler |
+| `test_data_processing.py` | `_normalize_str`, `clean_etf_data` (inkl. `Sonstige`-Fallback), `calculate_relative_weighting`, Namensabgleich `_name_key` / `resolve_stock_names`, Mapping-Konsistenz |
+| `test_data_download.py` | Fallback-JSON (lesen/schreiben, korrupte Datei bleibt erhalten), CSV-Download (gemockt), Erkennung von HTML- statt CSV-Antworten, Netzwerkfehler |
 | `test_file_handling.py` | `read_etf_data`, `export_to_excel` (alle Sheets, leere DFs, Fehlerbehandlung) |
 | `test_plotting.py` | Deutsches Zahlenformat `_de`, HTML-Tabelle, alle Chart-Figure-Builder |
 
