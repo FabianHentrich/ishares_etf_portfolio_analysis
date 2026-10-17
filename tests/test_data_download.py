@@ -17,6 +17,8 @@ import pandas as pd
 import pytest
 
 from scripts.data_download import (
+    _PRICE_WINDOW_DAYS,
+    _fallback_entry,
     _is_ishares_csv,
     _load_fallback,
     _save_fallback,
@@ -278,3 +280,86 @@ class TestDownloadStockPriceFallback:
             saved = json.load(f)
         # Mindestens eine der Positionen sollte gespeichert sein (je nach yf-Response-Format)
         assert isinstance(saved, dict)
+
+
+class TestKursdatumUndZeitfenster:
+    """Kursdatum, Alter von Fallback-Kursen und Abfragezeitraum."""
+
+    def _depot_df(self):
+        return pd.DataFrame({"Art": ["Aktie"], "Ticker": ["AAPL"]})
+
+    def _close(self, datum, wert=155.0):
+        df = pd.DataFrame({("Close", "AAPL.DE"): [wert]}, index=[pd.Timestamp(datum)])
+        df.columns = pd.MultiIndex.from_tuples(df.columns)
+        return df
+
+    def test_fallback_entry_neues_und_altes_format(self):
+        assert _fallback_entry({"kurs": 1.5, "datum": "2026-10-16"}) == (1.5, "2026-10-16")
+        assert _fallback_entry(0.09) == (0.09, None)
+
+    def test_kursdatum_wird_zurueckgegeben_und_gespeichert(self, tmp_path):
+        json_path = str(tmp_path / "fallback.json")
+        heute = pd.Timestamp.today().normalize()
+        with (
+            patch("scripts.data_download._FALLBACK_JSON", json_path),
+            patch("scripts.data_download.yf.download", return_value=self._close(heute)),
+        ):
+            _save_fallback({})
+            prices, used = download_stock_price(self._depot_df())
+        row = prices.set_index("Ticker").loc["AAPL"]
+        assert row["Kursdatum"] == heute.date().isoformat()
+        assert used == []
+        with open(json_path, encoding="utf-8") as f:
+            assert json.load(f)["AAPL"] == {"kurs": 155.0, "datum": heute.date().isoformat()}
+
+    def test_fallback_mit_datum_liefert_kursdatum(self, tmp_path, caplog):
+        json_path = str(tmp_path / "fallback.json")
+        with (
+            patch("scripts.data_download._FALLBACK_JSON", json_path),
+            patch("scripts.data_download.yf.download", return_value=pd.DataFrame()),
+            caplog.at_level(logging.WARNING, logger="scripts.data_download"),
+        ):
+            _save_fallback({"AAPL": {"kurs": 150.0, "datum": "2026-03-08"}})
+            prices, used = download_stock_price(self._depot_df())
+        row = prices.set_index("Ticker").loc["AAPL"]
+        assert used == ["AAPL"]
+        assert row["Kurs"] == 150.0
+        assert row["Kursdatum"] == "2026-03-08"
+        assert any("vom 2026-03-08" in r.message for r in caplog.records)
+
+    def test_fallback_altformat_datum_unbekannt(self, tmp_path, caplog):
+        json_path = str(tmp_path / "fallback.json")
+        with (
+            patch("scripts.data_download._FALLBACK_JSON", json_path),
+            patch("scripts.data_download.yf.download", return_value=pd.DataFrame()),
+            caplog.at_level(logging.WARNING, logger="scripts.data_download"),
+        ):
+            _save_fallback({"AAPL": 150.0})
+            prices, used = download_stock_price(self._depot_df())
+        assert prices.set_index("Ticker").loc["AAPL", "Kurs"] == 150.0
+        assert any("Datum unbekannt" in r.message for r in caplog.records)
+
+    def test_veralteter_live_kurs_wird_gemeldet(self, tmp_path, caplog):
+        json_path = str(tmp_path / "fallback.json")
+        with (
+            patch("scripts.data_download._FALLBACK_JSON", json_path),
+            patch("scripts.data_download.yf.download", return_value=self._close("2020-01-02")),
+            caplog.at_level(logging.WARNING, logger="scripts.data_download"),
+        ):
+            _save_fallback({})
+            download_stock_price(self._depot_df())
+        assert any("Tage alt" in r.message for r in caplog.records)
+
+    def test_zeitfenster_deckt_feiertage_ab(self, tmp_path):
+        """Abfrage beginnt _PRICE_WINDOW_DAYS Kalendertage vor heute – nicht nur am letzten Werktag."""
+        json_path = str(tmp_path / "fallback.json")
+        heute = pd.Timestamp.today().normalize()
+        with (
+            patch("scripts.data_download._FALLBACK_JSON", json_path),
+            patch("scripts.data_download.yf.download", return_value=self._close(heute)) as mock_dl,
+        ):
+            _save_fallback({})
+            download_stock_price(self._depot_df())
+        start = mock_dl.call_args.kwargs["start"]
+        assert start == heute - pd.Timedelta(days=_PRICE_WINDOW_DAYS)
+        assert _PRICE_WINDOW_DAYS >= 5  # mind. ein Wochenende + Feiertag

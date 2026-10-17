@@ -194,7 +194,11 @@ def main():
 
     stock_prices = stock_prices.drop_duplicates(subset="Ticker", keep="first")
     depot = depot.merge(
-        stock_prices[["Ticker", "Kurs"]], left_on="Ticker_clean", right_on="Ticker", how="left", suffixes=("_orig", "")
+        stock_prices[["Ticker", "Kurs", "Kursdatum"]],
+        left_on="Ticker_clean",
+        right_on="Ticker",
+        how="left",
+        suffixes=("_orig", ""),
     )
     # Merge-Hilfsspalten entfernen, originalen Ticker wiederherstellen
     depot.drop(columns=["Ticker_orig", "Ticker_clean"], errors="ignore", inplace=True)
@@ -426,7 +430,15 @@ def main():
         "Top-5-Konzentration": top5_label,
     }
     if fallback_used:
-        depot_summary["⚠️ Fallback-Kurse"] = f"{', '.join(fallback_used)} – kein Live-Kurs, historischen Wert verwendet"
+        kursdatum = stock_prices.set_index("Ticker")["Kursdatum"]
+
+        def _stand(ticker):
+            datum = kursdatum.get(ticker)
+            return f"Kurs vom {pd.Timestamp(datum):%d.%m.%Y}" if pd.notna(datum) and datum else "Datum unbekannt"
+
+        depot_summary["⚠️ Fallback-Kurse"] = (
+            ", ".join(f"{t} ({_stand(t)})" for t in fallback_used) + " – kein Live-Kurs, gespeicherten Wert verwendet"
+        )
 
     # Sektor-Heatmap: Gewichtung je Sektor × ETF/Quelle
     # Spalten = ETF-Name oder 'Aktie'/'Krypto', Zeilen = Sektor

@@ -142,9 +142,9 @@ Speichere deine Depotpositionen in einer Excel-Datei unter `INPUT_FILE`. Pflicht
 
 | Spalte | Beschreibung | Beispiel |
 |---|---|---|
-| `Ticker` | Yahoo Finance Ticker **ohne** Suffix. Für Cash: `-` | `2B7K`, `AAPL`, `BTC`, `-` |
+| `Ticker` | Yahoo Finance Ticker **ohne** Suffix. Für Cash: `-`. Für Polygon (ehemals MATIC) heißt der Yahoo-Ticker `POL28321`, nicht `POL` | `2B7K`, `AAPL`, `BTC`, `POL28321`, `-` |
 | `Art` | Assetklasse | `ETF`, `Aktie`, `Krypto`, `Cash` |
-| `Position` | Name der Position. Bei ETFs **exakt** wie der CSV-Dateiname (ohne `.csv`) | `iShares MSCI World SRI ETF` |
+| `Position` | Name der Position. Bei ETFs **exakt** wie der CSV-Dateiname (ohne `.csv`). Derselbe ETF darf in mehreren Zeilen stehen (z.B. zwei Depots) – die Werte werden addiert | `iShares MSCI World SRI ETF` |
 | `Sektor` | Sektor (nur für Einzelaktien relevant, bei ETFs `-`) | `Technologie`, `-` |
 | `Standort` | Land (nur für Einzelaktien relevant, bei ETFs `-`) | `USA`, `Frankreich`, `-` |
 | `Anteile` | Anzahl Anteile. Bei Cash: Betrag in Euro | `100`, `2500.00` |
@@ -191,14 +191,20 @@ download_csv_if_old(CSV_URL, DOWNLOAD_PATH, ETF_CSV_FILE, max_age_days=30)
 
 ### Fallback-Kurse (`price_fallback.json`)
 
-Wird automatisch erstellt und bei jedem erfolgreichen Kurs-Download aktualisiert. Falls Yahoo Finance keinen Kurs liefert (z.B. bei delisteten Krypto-Tokens), wird der zuletzt gespeicherte Kurs verwendet.
+Wird automatisch erstellt und bei jedem erfolgreichen Kurs-Download aktualisiert. Falls Yahoo Finance keinen Kurs liefert (z.B. bei delisteten Krypto-Tokens), wird der zuletzt gespeicherte Kurs verwendet. Zu jedem Kurs wird das Datum des Schlusskurses gespeichert:
 
-Initiale Standardwerte:
 ```json
 {
-  "MATIC": 0.10
+  "BTC": {"kurs": 72526.66, "datum": "2026-10-17"},
+  "MATIC": 0.09
 }
 ```
+
+Einträge im alten Format (nur Zahl, wie `MATIC` oben) werden weiter gelesen – ihr Datum gilt als unbekannt. Wird ein Fallback-Kurs verwendet, zeigen Log und ⚠️-Karte im Report sein Datum an (z.B. `MATIC (Kurs vom 08.03.2026)`), damit veraltete Werte auffallen. Initialer Standardwert bei neuer Datei: `{"MATIC": 0.10}`.
+
+### Kurszeitraum
+
+Kurse werden für die letzten **7 Kalendertage** abgefragt, verwendet wird jeweils der jüngste Schlusskurs. So liefern auch Läufe am Wochenende oder nach Börsenfeiertagen (z.B. Weihnachten, Ostern) einen echten Kurs statt eines Fallback-Werts. Das Datum jedes Kurses steht im Excel-Sheet *Depotwerte* in der Spalte `Kursdatum`. Ist ein Live-Kurs älter als 7 Tage, erscheint eine `WARNING` (Ticker inaktiv oder delistet?). Beide Werte lassen sich in `scripts/data_download.py` über `_PRICE_WINDOW_DAYS` und `_STALE_DAYS` anpassen.
 
 Ist die Datei beschädigt (ungültiges JSON), wird sie **nicht** überschrieben: Das Script sichert sie als `price_fallback.json.corrupt`, rechnet für diesen Lauf mit den Standardwerten und meldet eine `WARNING`. Zum Wiederherstellen die Sicherung reparieren und zurück nach `price_fallback.json` kopieren.
 
@@ -235,6 +241,7 @@ Für detailliertes Debugging kann der Log-Level temporär auf `DEBUG` gesetzt we
 | `ETF '...' nicht in ETF-CSV-Daten gefunden` | `Position`-Name in `portfolio.xlsx` weicht vom CSV-Dateinamen ab | Namen exakt angleichen (ohne `.csv`-Extension) |
 | `Einzelaktie(n) ohne Sektor/Standort` | `Sektor`/`Standort`-Spalte in `portfolio.xlsx` leer oder `-` | Sektor und Standort für Einzelaktien in `portfolio.xlsx` eintragen |
 | `Kein Live-Kurs für '...' – Fallback verwendet` | Ticker bei Yahoo Finance nicht gefunden oder delistet | Ticker in `portfolio.xlsx` bzw. Suffixe in `.env` anpassen oder Kurs in `price_fallback.json` manuell aktualisieren |
+| `Kurs für '...' ist vom ... (n Tage alt)` | Yahoo liefert seit über 7 Tagen keinen neuen Kurs – Ticker inaktiv, umbenannt oder delistet | Aktuellen Ticker auf finance.yahoo.com suchen und in `portfolio.xlsx` eintragen |
 | `Gesamtwert ist 0` – Abbruch | Alle Kurse konnten nicht geladen werden | Netzwerkverbindung und Ticker-Suffixe in `.env` prüfen |
 | Charts laden nicht im Browser | Browser blockiert großes Inline-JS bei `file://` (Firefox) | Report in Edge/Chrome öffnen oder Script neu ausführen |
 | `OSError: Invalid argument` beim Excel-Lesen | Excel-Datei ist aktuell geöffnet und gesperrt | Excel-Datei schließen und Script neu starten |
@@ -260,7 +267,7 @@ Die Konfiguration liegt in `ruff.toml`. Geprüft werden: pyflakes, pycodestyle, 
 | Testdatei | Abgedeckte Bereiche |
 |---|---|
 | `test_data_processing.py` | `_normalize_str`, `clean_etf_data` (inkl. `Sonstige`-Fallback), `calculate_relative_weighting`, Namensabgleich `_name_key` / `resolve_stock_names`, Mapping-Konsistenz |
-| `test_data_download.py` | Fallback-JSON (lesen/schreiben, korrupte Datei bleibt erhalten), CSV-Download (gemockt), Erkennung von HTML- statt CSV-Antworten, Netzwerkfehler |
+| `test_data_download.py` | Fallback-JSON (lesen/schreiben, korrupte Datei bleibt erhalten), CSV-Download (gemockt), Erkennung von HTML- statt CSV-Antworten, Netzwerkfehler, Kursdatum/7-Tage-Fenster, Alter von Fallback-Kursen (neues und altes JSON-Format) |
 | `test_file_handling.py` | `read_etf_data`, `export_to_excel` (alle Sheets, leere DFs, Fehlerbehandlung) |
 | `test_plotting.py` | Deutsches Zahlenformat `_de`, HTML-Tabelle, alle Chart-Figure-Builder |
 

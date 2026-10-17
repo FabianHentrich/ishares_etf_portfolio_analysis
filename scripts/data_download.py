@@ -21,6 +21,29 @@ _DEFAULT_FALLBACKS = {
     "MATIC": 0.10,
 }
 
+# Kurse der letzten N Kalendertage abfragen – deckt Wochenenden und Börsenfeiertage
+# (z.B. Weihnachten/Ostern) ab; verwendet wird jeweils der jüngste Schlusskurs
+_PRICE_WINDOW_DAYS = 7
+# Ab diesem Alter (Tage) wird ein Kurs im Log als veraltet gemeldet
+_STALE_DAYS = 7
+
+
+def _fallback_entry(value):
+    """Liest einen Fallback-Eintrag → (kurs, datum).
+
+    Neues Format: {"kurs": 1.23, "datum": "2026-10-16"}; Altformat (nur Zahl) → datum None.
+    """
+    if isinstance(value, dict):
+        return value.get("kurs"), value.get("datum")
+    return value, None
+
+
+def _age_days(datum):
+    """Alter eines ISO-Datums in Tagen (None bei unbekanntem Datum)."""
+    if not datum:
+        return None
+    return (pd.Timestamp.today().normalize() - pd.Timestamp(datum).normalize()).days
+
 
 def _load_fallback() -> dict:
     """Lädt die Fallback-Kurse aus der JSON-Datei. Erstellt sie bei Bedarf."""
@@ -123,13 +146,15 @@ def download_csv_if_old(urls, folder_path, filenames, max_age_days=30):
 
 def download_stock_price(df, stock_ticker_suffixes=None, crypto_ticker_suffixes=None):
     """
-    Download stock prices from Yahoo Finance API for the last working day and store in a DataFrame.
+    Download stock prices from Yahoo Finance API and store the latest close within the last
+    _PRICE_WINDOW_DAYS calendar days in a DataFrame (covers weekends and exchange holidays).
     :param df: DataFrame with 'Ticker' column containing stock and crypto tickers
     :param stock_ticker_suffixes: suffixes to add to stock tickers for Yahoo Finance API (e.g., ".DE" for Xetra).
     Default is [".DE"]. For other exchanges add additional suffixes to the list.
     :param crypto_ticker_suffixes: suffixes to add to crypto tickers for Yahoo Finance API (e.g., "-EUR").
     Default is ["-EUR"]. For other currencies add additional suffixes to the list.
-    :return: DataFrame with 'Ticker' and 'Kurs' columns containing the latest prices.
+    :return: Tuple (DataFrame with 'Ticker', 'Kurs' and 'Kursdatum' (ISO date or None) columns,
+             list of tickers for which a stored fallback price was used).
     """
     # Mutable default argument guard
     if stock_ticker_suffixes is None:
@@ -138,8 +163,8 @@ def download_stock_price(df, stock_ticker_suffixes=None, crypto_ticker_suffixes=
         crypto_ticker_suffixes = ["-EUR"]
 
     today = pd.Timestamp.today()
-    last_working_day = today - pd.offsets.BDay(1)
-    logger.info(f"Letzter Handelstag: {last_working_day.date()}")
+    start = today.normalize() - pd.Timedelta(days=_PRICE_WINDOW_DAYS)
+    logger.info(f"Kurszeitraum: {start.date()} bis {today.date()} (jüngster Schlusskurs wird verwendet)")
 
     # Process stock and ETF tickers – strip any existing suffix first
     stock_tickers = df[df["Art"].isin(["Aktie", "ETF"])]["Ticker"].str.replace(r"\..*$", "", regex=True).tolist()
@@ -161,9 +186,7 @@ def download_stock_price(df, stock_ticker_suffixes=None, crypto_ticker_suffixes=
             modified_tickers = [t + suffix for t in remaining]
             logger.debug(f"Batch-Download für {asset_type} mit Suffix '{suffix}': {modified_tickers}")
             try:
-                batch = yf.download(
-                    modified_tickers, start=last_working_day, end=today, progress=False, auto_adjust=True
-                )
+                batch = yf.download(modified_tickers, start=start, end=today, progress=False, auto_adjust=True)
                 if batch.empty:
                     continue
 
@@ -176,8 +199,11 @@ def download_stock_price(df, stock_ticker_suffixes=None, crypto_ticker_suffixes=
                     if mod_ticker in close.columns:
                         val = close[mod_ticker].dropna()
                         if not val.empty:
-                            price_list.append({"Ticker": orig_ticker, "Kurs": float(val.iloc[-1])})
-                            logger.debug(f"Kurs gefunden: {orig_ticker} = {float(val.iloc[-1]):.4f} (via {mod_ticker})")
+                            datum = pd.Timestamp(val.index[-1]).date().isoformat()
+                            price_list.append({"Ticker": orig_ticker, "Kurs": float(val.iloc[-1]), "Kursdatum": datum})
+                            logger.debug(
+                                f"Kurs gefunden: {orig_ticker} = {float(val.iloc[-1]):.4f} vom {datum} (via {mod_ticker})"
+                            )
             except Exception as e:
                 logger.warning(f"Batch-Download fehlgeschlagen ({suffix}): {e}")
 
@@ -190,22 +216,21 @@ def download_stock_price(df, stock_ticker_suffixes=None, crypto_ticker_suffixes=
                 modified_ticker = ticker + suffix
                 logger.debug(f"Einzel-Fallback: {modified_ticker}")
                 try:
-                    data = yf.download(
-                        modified_ticker, start=last_working_day, end=today, progress=False, auto_adjust=True
-                    )
+                    data = yf.download(modified_ticker, start=start, end=today, progress=False, auto_adjust=True)
                     if not data.empty and "Close" in data.columns:
                         val = data["Close"].dropna()
                         if not val.empty:
                             kurs = float(val.iloc[-1].item()) if hasattr(val.iloc[-1], "item") else float(val.iloc[-1])
-                            price_list.append({"Ticker": ticker, "Kurs": kurs})
-                            logger.info(f"Kurs gefunden (Fallback): {ticker} = {kurs:.4f}")
+                            datum = pd.Timestamp(val.index[-1]).date().isoformat()
+                            price_list.append({"Ticker": ticker, "Kurs": kurs, "Kursdatum": datum})
+                            logger.info(f"Kurs gefunden (Fallback): {ticker} = {kurs:.4f} vom {datum}")
                             price_found = True
                             break
                 except Exception as e:
                     logger.warning(f"Fehler beim Download von '{modified_ticker}': {e}")
             if not price_found:
                 logger.warning(f"Kein Kurs gefunden für '{ticker}' – wird als NaN gesetzt.")
-                price_list.append({"Ticker": ticker, "Kurs": None})  # None statt [None]
+                price_list.append({"Ticker": ticker, "Kurs": None, "Kursdatum": None})
 
     if stock_tickers:
         _fetch_prices(stock_tickers, stock_ticker_suffixes, "Aktie/ETF")
@@ -224,18 +249,26 @@ def download_stock_price(df, stock_ticker_suffixes=None, crypto_ticker_suffixes=
         ticker = entry["Ticker"]
         kurs = entry["Kurs"]
         if kurs is not None:
-            # Aktuellen Kurs in den Fallback schreiben
-            if fallback.get(ticker) != kurs:
-                fallback[ticker] = kurs
+            # Aktuellen Kurs samt Datum in den Fallback schreiben
+            neu = {"kurs": kurs, "datum": entry["Kursdatum"]}
+            if fallback.get(ticker) != neu:
+                fallback[ticker] = neu
                 fallback_updated = True
+            alter = _age_days(entry["Kursdatum"])
+            if alter is not None and alter > _STALE_DAYS:
+                logger.warning(
+                    f"Kurs für '{ticker}' ist vom {entry['Kursdatum']} ({alter} Tage alt) – Ticker inaktiv/delistet?"
+                )
         else:
             # Kurs fehlt → Fallback verwenden falls vorhanden
             if ticker in fallback:
-                entry["Kurs"] = fallback[ticker]
+                fb_kurs, fb_datum = _fallback_entry(fallback[ticker])
+                entry["Kurs"], entry["Kursdatum"] = fb_kurs, fb_datum
                 fallback_used.append(ticker)
+                alter = _age_days(fb_datum)
+                stand = f"vom {fb_datum}, {alter} Tage alt" if alter is not None else "Datum unbekannt"
                 logger.warning(
-                    f"Kein Live-Kurs für '{ticker}' – Fallback-Kurs aus JSON verwendet: "
-                    f"{fallback[ticker]:.4f} (Wert möglicherweise veraltet!)"
+                    f"Kein Live-Kurs für '{ticker}' – Fallback-Kurs aus JSON verwendet: {fb_kurs:.4f} ({stand})"
                 )
             else:
                 logger.warning(f"Kein Live-Kurs und kein Fallback für '{ticker}' – bleibt NaN.")
@@ -245,7 +278,7 @@ def download_stock_price(df, stock_ticker_suffixes=None, crypto_ticker_suffixes=
         logger.info(f"Fallback-JSON aktualisiert: {_FALLBACK_JSON}")
 
     # Cash-Eintrag
-    cash = pd.DataFrame({"Ticker": ["-"], "Kurs": [1.0]})
+    cash = pd.DataFrame({"Ticker": ["-"], "Kurs": [1.0], "Kursdatum": [None]})
     prices = pd.DataFrame(price_list)
     prices = pd.concat([prices, cash], ignore_index=True)
     logger.debug(f"Preisliste:\n{prices.to_string()}")

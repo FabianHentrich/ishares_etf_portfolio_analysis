@@ -280,6 +280,25 @@ class TestCalculateRelativeWeighting:
         with pytest.raises(ValueError, match="depot_components"):
             calculate_relative_weighting(etf_df, depot_df)
 
+    def test_gleicher_etf_in_zwei_zeilen_wird_addiert(self):
+        """Derselbe ETF in zwei Depot-Zeilen (z.B. zwei Depots) → Depotgewichte werden addiert."""
+        etf = _make_etf_df(**{"Gewichtung (%)": [50.0, 50.0]})
+        depot = _make_depot_df(
+            Art=["ETF", "ETF", "Cash"],
+            Position=["Test ETF", "Test ETF", "Cash"],
+            Ticker=["TST", "TST", "-"],
+            **{"Marktwert (%)": [30.0, 20.0, 50.0]},
+        )
+        result, _ = calculate_relative_weighting(etf, depot)
+        assert result["relative Gewichtung (%)"].sum() == pytest.approx(50.0)
+
+    def test_aktie_mit_etf_namen_zaehlt_nicht_als_etf(self):
+        """Nur Zeilen mit Art == 'ETF' fließen ins ETF-Gewicht ein."""
+        etf = _make_etf_df(**{"Gewichtung (%)": [50.0, 50.0]})
+        depot = _make_depot_df(Position=["Test ETF", "Test ETF", "Cash"])  # 2. Zeile ist Art 'Aktie'
+        result, _ = calculate_relative_weighting(etf, depot)
+        assert result["relative Gewichtung (%)"].sum() == pytest.approx(50.0)
+
     def test_etf_gewicht_null_ergibt_null_gewichtung(self):
         """ETF mit Marktwert 0% → alle Positionen bekommen relative Gewichtung 0."""
         etf_df = pd.DataFrame({"ETF": ["Test ETF"], "Name": ["Apple"], "Gewichtung (%)": [10.0]})

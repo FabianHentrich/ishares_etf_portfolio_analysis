@@ -266,8 +266,11 @@ def calculate_relative_weighting(etf_stocks, depot_components):
             )
             continue
 
-        mask = depot_components["Position"] == etf_name
-        etf_weight = depot_components.loc[mask, "Marktwert (%)"].values[0]
+        mask = (depot_components["Art"] == "ETF") & (depot_components["Position"] == etf_name)
+        # Derselbe ETF kann in mehreren Zeilen stehen (z.B. in zwei Depots) → Gewichte addieren
+        etf_weight = depot_components.loc[mask, "Marktwert (%)"].sum()
+        if mask.sum() > 1:
+            logger.info(f"ETF '{etf_name}' steht in {mask.sum()} Depot-Zeilen – Gewichte werden addiert.")
 
         if etf_weight <= 0:
             logger.warning(f"ETF '{etf_name}' hat Depotgewicht {etf_weight:.4f}% – kein Kurs? Gewichtung wird 0.")
