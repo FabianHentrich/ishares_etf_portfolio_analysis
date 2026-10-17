@@ -8,6 +8,8 @@ Getestet werden:
 - calculate_relative_weighting: Gewichtungsberechnung, Edge Cases
 """
 
+import logging
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -165,14 +167,23 @@ class TestCleanEtfData:
         result = clean_etf_data(df)
         assert not result.empty
 
-    def test_unbekannte_sektoren_werden_sonstige(self):
-        unresolved_keys = set(SECTOR_MAPPING.keys()) - set(SECTOR_MAPPING.values())
-        if not unresolved_keys:
-            pytest.skip("Kein unresolved Key im SECTOR_MAPPING vorhanden")
-        key = next(iter(unresolved_keys))
-        df = _make_etf_df(Sektor=[key, "Information Technology"])
+    def test_unbekannte_sektoren_werden_sonstige(self, caplog):
+        df = _make_etf_df(Sektor=["Völlig Neuer Sektor", "Information Technology"])
+        with caplog.at_level(logging.WARNING, logger="scripts.data_processing"):
+            result = clean_etf_data(df)
+        assert list(result["Sektor"]) == ["Sonstige", "Technologie"]
+        assert any("Völlig Neuer Sektor" in r.message for r in caplog.records)
+
+    def test_finanzwesen_wird_finanzen(self):
+        """Aktuelle iShares-CSVs liefern 'Finanzwesen' – darf keine eigene Kategorie werden."""
+        df = _make_etf_df(Sektor=["Finanzwesen", "Financials"])
         result = clean_etf_data(df)
-        assert key not in result["Sektor"].values
+        assert (result["Sektor"] == "Finanzen").all()
+
+    def test_unbekannte_laender_bleiben_erhalten(self):
+        df = _make_etf_df(Standort=["Taiwan", "United States"])
+        result = clean_etf_data(df)
+        assert list(result["Standort"]) == ["Taiwan", "USA"]
 
     def test_gewichtung_komma_als_dezimaltrenner(self):
         df = _make_etf_df(**{"Gewichtung (%)": ["5,25", "3,10"]})

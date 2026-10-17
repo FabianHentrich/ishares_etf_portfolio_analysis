@@ -23,6 +23,7 @@ SECTOR_MAPPING = {
     # Englische Originalbezeichnungen
     "Information Technology": "Technologie",
     "Financials": "Finanzen",
+    "Finanzwesen": "Finanzen",  # iShares-CSV-Bezeichnung seit Website-Umstellung 2026
     "Health Care": "Gesundheit",
     "Consumer Discretionary": "Zyklischer Konsum",
     "Consumer Staples": "Basiskonsumgüter",
@@ -126,24 +127,21 @@ def clean_etf_data(df):
     df["Sektor"] = df["Sektor"].replace(SECTOR_MAPPING)
     df["Standort"] = df["Standort"].replace(LOCATION_MAPPING)
 
-    # Nach dem Mapping: Werte die NOCH im Source-Key-Set stehen wurden nicht aufgelöst → Sonstige
-    # Alle anderen Werte (auch unbekannte Länder/Sektoren aus der CSV) bleiben wie sie sind –
-    # sie sind einfach nicht im Mapping und müssen ggf. ergänzt werden, aber nicht pauschal 'Sonstige'
-    unresolved_sector_keys = set(SECTOR_MAPPING.keys()) - set(SECTOR_MAPPING.values())
-    unresolved_loc_keys = set(LOCATION_MAPPING.keys()) - set(LOCATION_MAPPING.values())
-
-    unk_s_mask = df["Sektor"].notna() & df["Sektor"].isin(unresolved_sector_keys)
-    unk_l_mask = df["Standort"].notna() & df["Standort"].isin(unresolved_loc_keys)
-
+    # Sektoren: Die Zielwerte des Mappings sind die vollständige Sektorliste.
+    # Alles, was danach nicht darin liegt, ist unbekannt → WARNING + 'Sonstige'
+    # (sonst entstünden still doppelte Kategorien wie 'Finanzwesen' neben 'Finanzen').
+    unk_s_mask = df["Sektor"].notna() & ~df["Sektor"].isin(set(SECTOR_MAPPING.values()))
     if unk_s_mask.any():
         unk_vals = df.loc[unk_s_mask, "Sektor"].value_counts().to_dict()
-        logger.warning(f"Nicht aufgelöste Sektoren → 'Sonstige': {unk_vals}")
-    if unk_l_mask.any():
-        unk_vals = df.loc[unk_l_mask, "Standort"].value_counts().to_dict()
-        logger.warning(f"Nicht aufgelöste Länder → 'Sonstige': {unk_vals}")
-
+        logger.warning(f"Nicht aufgelöste Sektoren → 'Sonstige' (SECTOR_MAPPING ergänzen): {unk_vals}")
     df.loc[unk_s_mask, "Sektor"] = "Sonstige"
-    df.loc[unk_l_mask, "Standort"] = "Sonstige"
+
+    # Länder: keine abschließende Liste – unbekannte Länder bleiben erhalten.
+    # Nur Encoding-Artefakte (Ersatzzeichen) werden gemeldet, damit das Mapping ergänzt werden kann.
+    bad_l_mask = df["Standort"].notna() & df["Standort"].astype(str).str.contains("�", regex=False)
+    if bad_l_mask.any():
+        bad_vals = df.loc[bad_l_mask, "Standort"].value_counts().to_dict()
+        logger.warning(f"Länder mit Encoding-Fehlern (LOCATION_MAPPING ergänzen): {bad_vals}")
 
     # Leere Strings nach allen Operationen auffangen
     df["Sektor"] = df["Sektor"].replace("", pd.NA)

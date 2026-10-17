@@ -16,7 +16,22 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from scripts.data_download import _load_fallback, _save_fallback, download_csv_if_old, download_stock_price
+from scripts.data_download import (
+    _is_ishares_csv,
+    _load_fallback,
+    _save_fallback,
+    download_csv_if_old,
+    download_stock_price,
+)
+
+# Minimaler Inhalt im Format der iShares-Positions-CSV (latest-holdings.csv)
+_VALID_CSV = (
+    'Fondsposition per,"15.Okt.2026"\n'
+    "\n"
+    "Emittententicker,Name,Sektor,Anlageklasse,Marktwert,Gewichtung (%),Nominalwert,Nominale,Kurs,Standort\n"
+    '"NVDA","NVIDIA","IT","Aktien","1,00","8,58","1,00","1,00","1,00","Vereinigte Staaten"\n'
+)
+_HTML_PAGE = '<!doctype html>\n<html lang="de-DE"><head><title>iShares</title></head></html>'
 
 # ---------------------------------------------------------------------------
 # Tests: _load_fallback / _save_fallback
@@ -46,6 +61,16 @@ class TestFallbackJson:
             # Soll nicht werfen – WARNING wird geloggt, Defaults zurückgegeben
             result = _load_fallback()
         assert isinstance(result, dict)
+
+    def test_korrupte_datei_wird_nicht_ueberschrieben(self, tmp_path):
+        """Lesefehler darf gespeicherte Kurse nicht vernichten – Original bleibt + Sicherungskopie."""
+        json_path = tmp_path / "fallback.json"
+        kaputt = '{"BTC": 50000.0, "ETH": 3000.0'  # fehlende Klammer
+        json_path.write_text(kaputt, encoding="utf-8")
+        with patch("scripts.data_download._FALLBACK_JSON", str(json_path)):
+            _load_fallback()
+        assert json_path.read_text(encoding="utf-8") == kaputt
+        assert (tmp_path / "fallback.json.corrupt").read_text(encoding="utf-8") == kaputt
 
     def test_speichert_und_laedt_korrekt(self, tmp_path):
         json_path = str(tmp_path / "fallback.json")
@@ -94,7 +119,7 @@ class TestDownloadCsvIfOld:
         os.utime(str(csv), (old_time, old_time))
 
         mock_response = MagicMock()
-        mock_response.text = "neue daten"
+        mock_response.text = _VALID_CSV
         mock_response.raise_for_status = MagicMock()
         mock_session = MagicMock()
         mock_session.get.return_value = mock_response
@@ -103,7 +128,7 @@ class TestDownloadCsvIfOld:
             download_csv_if_old(["http://example.com/old.csv"], str(tmp_path), ["old.csv"], max_age_days=1)
 
         mock_session.get.assert_called_once()
-        assert csv.read_text(encoding="utf-8") == "neue daten"
+        assert csv.read_text(encoding="utf-8") == _VALID_CSV
 
     def test_bricht_ab_bei_fehlendem_verzeichnis(self, tmp_path, caplog):
         """Nicht vorhandenes Verzeichnis → früher Abbruch mit ERROR-Log."""
@@ -114,7 +139,7 @@ class TestDownloadCsvIfOld:
     def test_laedt_neue_datei_ohne_vorhandene(self, tmp_path):
         """Datei existiert noch nicht → Download wird durchgeführt."""
         mock_response = MagicMock()
-        mock_response.text = "frische daten"
+        mock_response.text = _VALID_CSV
         mock_response.raise_for_status = MagicMock()
         mock_session = MagicMock()
         mock_session.get.return_value = mock_response
@@ -122,12 +147,12 @@ class TestDownloadCsvIfOld:
         with patch("scripts.data_download._create_retry_session", return_value=mock_session):
             download_csv_if_old(["http://example.com/new.csv"], str(tmp_path), ["new.csv"])
 
-        assert (tmp_path / "new.csv").read_text(encoding="utf-8") == "frische daten"
+        assert (tmp_path / "new.csv").read_text(encoding="utf-8") == _VALID_CSV
 
     def test_mehrere_urls_werden_alle_verarbeitet(self, tmp_path):
         """Zwei URLs → beide Dateien werden heruntergeladen."""
         mock_response = MagicMock()
-        mock_response.text = "csv inhalt"
+        mock_response.text = _VALID_CSV
         mock_response.raise_for_status = MagicMock()
         mock_session = MagicMock()
         mock_session.get.return_value = mock_response
@@ -138,6 +163,41 @@ class TestDownloadCsvIfOld:
         assert mock_session.get.call_count == 2
         assert (tmp_path / "etf1.csv").exists()
         assert (tmp_path / "etf2.csv").exists()
+
+    def test_html_antwort_ueberschreibt_vorhandene_csv_nicht(self, tmp_path, caplog):
+        """iShares liefert HTML statt CSV (z.B. veraltete URL) → alte Datei bleibt unverändert."""
+        csv = tmp_path / "etf.csv"
+        csv.write_text(_VALID_CSV, encoding="utf-8")
+        old_time = pd.Timestamp("2020-01-01").timestamp()
+        os.utime(str(csv), (old_time, old_time))
+
+        mock_response = MagicMock()
+        mock_response.text = _HTML_PAGE
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_response
+
+        with (
+            patch("scripts.data_download._create_retry_session", return_value=mock_session),
+            caplog.at_level(logging.ERROR, logger="scripts.data_download"),
+        ):
+            download_csv_if_old(["http://example.com/etf.csv"], str(tmp_path), ["etf.csv"], max_age_days=1)
+
+        assert csv.read_text(encoding="utf-8") == _VALID_CSV
+        # Änderungsdatum unverändert → nächster Lauf versucht erneut zu laden
+        assert os.path.getmtime(str(csv)) == pytest.approx(old_time)
+        assert not (tmp_path / "etf.csv.tmp").exists()
+        assert any("keine iShares-Positions-CSV" in r.message for r in caplog.records)
+
+    def test_html_antwort_legt_keine_neue_datei_an(self, tmp_path):
+        mock_response = MagicMock()
+        mock_response.text = _HTML_PAGE
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_response
+
+        with patch("scripts.data_download._create_retry_session", return_value=mock_session):
+            download_csv_if_old(["http://example.com/etf.csv"], str(tmp_path), ["etf.csv"])
+
+        assert not (tmp_path / "etf.csv").exists()
 
     def test_loggt_fehler_bei_netzwerkfehler(self, tmp_path, caplog):
         """Netzwerkfehler beim Download → ERROR wird geloggt, kein Crash."""
@@ -151,6 +211,20 @@ class TestDownloadCsvIfOld:
             download_csv_if_old(["http://example.com/fail.csv"], str(tmp_path), ["fail.csv"])
 
         assert any("Fehler" in r.message for r in caplog.records)
+
+
+class TestIsIsharesCsv:
+    def test_erkennt_gueltige_csv(self):
+        assert _is_ishares_csv(_VALID_CSV)
+
+    def test_erkennt_csv_mit_bom(self):
+        assert _is_ishares_csv("﻿" + _VALID_CSV)
+
+    def test_lehnt_html_ab(self):
+        assert not _is_ishares_csv(_HTML_PAGE)
+
+    def test_lehnt_leeren_text_ab(self):
+        assert not _is_ishares_csv("")
 
 
 # ---------------------------------------------------------------------------

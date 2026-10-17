@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import shutil
 
 import pandas as pd
 import requests
@@ -30,7 +31,18 @@ def _load_fallback() -> dict:
             logger.debug(f"Fallback-JSON geladen: {_FALLBACK_JSON}")
             return data
         except Exception as e:
-            logger.warning(f"Fallback-JSON konnte nicht gelesen werden: {e}")
+            # Datei NICHT überschreiben – sonst gehen alle gespeicherten Kurse verloren.
+            # Defensive Kopie sichern, damit ein späteres _save_fallback() sie nicht vernichtet.
+            backup = _FALLBACK_JSON + ".corrupt"
+            try:
+                shutil.copy2(_FALLBACK_JSON, backup)
+            except Exception:
+                backup = None
+            logger.warning(
+                f"Fallback-JSON konnte nicht gelesen werden: {e} – Defaults werden verwendet"
+                + (f", Original gesichert unter '{backup}'." if backup else ".")
+            )
+            return dict(_DEFAULT_FALLBACKS)
     # Datei noch nicht vorhanden → mit Defaults initialisieren
     _save_fallback(_DEFAULT_FALLBACKS)
     return dict(_DEFAULT_FALLBACKS)
@@ -53,6 +65,12 @@ def _create_retry_session(retries=3, backoff_factor=1, status_forcelist=(429, 50
     session.mount("https://", HTTPAdapter(max_retries=retry))
     session.mount("http://", HTTPAdapter(max_retries=retry))
     return session
+
+
+def _is_ishares_csv(text: str) -> bool:
+    """Prüft, ob der Text eine iShares-Positions-CSV ist (und keine HTML-Seite o.ä.)."""
+    head = text.lstrip("﻿")[:2000]
+    return head.startswith("Fondsposition") and "Emittententicker" in head
 
 
 def download_csv_if_old(urls, folder_path, filenames, max_age_days=30):
@@ -86,8 +104,18 @@ def download_csv_if_old(urls, folder_path, filenames, max_age_days=30):
         try:
             response = session.get(url, timeout=30)
             response.raise_for_status()
-            with open(csv_file_path, "w", encoding="utf-8") as f:
+            if not _is_ishares_csv(response.text):
+                logger.error(
+                    f"Download von '{filename}' liefert keine iShares-Positions-CSV (evtl. HTML-Seite) – "
+                    f"vorhandene Datei bleibt erhalten. Bitte CSV_URL in .env prüfen "
+                    f"(aktuelles Format: .../produkte/<id>/<name>/latest-holdings.csv)."
+                )
+                continue
+            # Erst in Temp-Datei schreiben, dann atomar ersetzen – kein halb geschriebenes CSV
+            tmp_path = csv_file_path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 f.write(response.text)
+            os.replace(tmp_path, csv_file_path)
             logger.info(f"CSV-Datei '{filename}' erfolgreich heruntergeladen.")
         except Exception as e:
             logger.error(f"Fehler beim Download von '{filename}': {e}")

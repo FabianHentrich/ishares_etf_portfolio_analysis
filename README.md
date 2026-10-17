@@ -127,8 +127,12 @@ CRYPTO_TICKER_SUFFIXES="-EUR"          # Krypto in Euro
 ```
 
 > **Wo finde ich die CSV-URLs?**  
-> Auf der BlackRock/iShares-Produktseite des jeweiligen ETFs → Button „Alle Positionen herunterladen" → Rechtsklick → Link kopieren.  
-> ![CSV Download Pfad](iShares_CSV_download_path.png)
+> Auf der BlackRock/iShares-Produktseite des jeweiligen ETFs → Bereich „Positionen" → Download der Fondspositionen → Rechtsklick → Link kopieren.  
+> Seit der Website-Umstellung 2026 haben die URLs das Format  
+> `https://www.ishares.com/de/privatanleger/de/produkte/<id>/<fondsname>/latest-holdings.csv`  
+> (z. B. `…/produkte/290846/ishares-msci-world-sri-ucits-etf/latest-holdings.csv`).  
+> Die alten `…/1478358465952.ajax?fileType=csv…`-Links liefern nur noch die HTML-Produktseite. Solche Antworten werden erkannt und **nicht** gespeichert – die vorhandene CSV bleibt erhalten und im Log erscheint ein `ERROR`.  
+> ![CSV Download Pfad](iShares_CSV_download_path.png) *(Screenshot zeigt noch die alte Seite)*
 
 ### 3. `portfolio.xlsx` erstellen
 
@@ -262,15 +266,19 @@ Die Konfiguration liegt in `ruff.toml`. Geprüft werden: pyflakes, pycodestyle, 
 
 ### Neue Sektoren oder Länder ergänzen
 
-Unbekannte Werte werden automatisch als `'Sonstige'` gruppiert und im Log als `WARNING` gemeldet:
+**Sektoren:** Die Zielwerte von `SECTOR_MAPPING` bilden die vollständige Sektorliste. Jeder andere Sektor aus einer ETF-CSV wird als `'Sonstige'` gruppiert und im Log als `WARNING` gemeldet:
 ```
-WARNING  scripts.data_processing – Nicht aufgelöste Länder → 'Sonstige': {'Neues Land': 5}
+WARNING  scripts.data_processing – Nicht aufgelöste Sektoren → 'Sonstige' (SECTOR_MAPPING ergänzen): {'Neuer Sektor': 5}
 ```
+**Länder:** Hier gibt es keine abschließende Liste – unbekannte Länder bleiben unverändert erhalten. Nur Werte mit Encoding-Fehlern (Ersatzzeichen `�`) werden als `WARNING` gemeldet.
+
 Mapping in `scripts/data_processing.py` ergänzen:
 ```python
+# SECTOR_MAPPING
+"Neuer Sektor": "Industrie",         # auf einen bestehenden Zielsektor abbilden
+
 # LOCATION_MAPPING
-"Neues Land": "Neues Land",          # Identity-Mapping (korrekte Schreibweise)
-"New Country": "Neues Land",         # Englischer Aliasname
+"New Country": "Neues Land",         # Englischer Aliasname / Encoding-Variante
 ```
 
 ### Diversifikations-Score (HHI) & Top-5-Konzentration
